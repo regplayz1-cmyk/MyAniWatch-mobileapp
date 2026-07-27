@@ -11,33 +11,65 @@ import {
 } from "react-native";
 import { COLORS } from "../theme/colors";
 import { apiSearchAnime } from "../services/api";
-import { Search, X, SlidersHorizontal } from "lucide-react-native";
+import { Search, X, Compass } from "lucide-react-native";
 
 const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Romance", "Sci-Fi", "Slice of Life"];
 
+const extractAnimeList = (res: any): any[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.results)) return res.results;
+  if (Array.isArray(res.media)) return res.media;
+  if (Array.isArray(res.data?.media)) return res.data.media;
+  if (Array.isArray(res.animes)) return res.animes;
+  return [];
+};
+
+const getImageUri = (item: any): string => {
+  if (!item) return "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500";
+  return (
+    item.coverImage?.extraLarge ||
+    item.coverImage?.large ||
+    item.coverImage?.medium ||
+    item.poster ||
+    item.image ||
+    "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500"
+  );
+};
+
+const getTitleString = (item: any): string => {
+  if (!item) return "Anime";
+  if (typeof item.title === "string") return item.title;
+  return item.title?.english || item.title?.romaji || item.name || "Anime Title";
+};
+
 export default function BrowseScreen({ navigation }: any) {
   const [query, setQuery] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
-  const handleSearch = async (text: string) => {
-    setQuery(text);
-    if (!text.trim()) {
-      setResults([]);
-      return;
-    }
-
+  const fetchSearch = async (searchTerm: string, genreFilter: string | null) => {
     try {
       setLoading(true);
-      const res = await apiSearchAnime(text);
-      const items = res.data?.media || res.results || res.animes || [];
+      const res = await apiSearchAnime(searchTerm, 1, genreFilter || undefined).catch(() => null);
+      const items = extractAnimeList(res);
       setResults(items);
-    } catch {
-      // Ignore
+    } catch (err) {
+      console.error("Search error:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    // Initial fetch popular Action or default browse
+    fetchSearch("", selectedGenre);
+  }, [selectedGenre]);
+
+  const handleQueryChange = (text: string) => {
+    setQuery(text);
+    fetchSearch(text, selectedGenre);
   };
 
   return (
@@ -48,13 +80,15 @@ export default function BrowseScreen({ navigation }: any) {
           <Search size={18} color={COLORS.textMuted} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search anime title..."
+            placeholder="Search anime title (e.g. Naruto, One Piece)..."
             placeholderTextColor={COLORS.textDark}
             value={query}
-            onChangeText={handleSearch}
+            onChangeText={handleQueryChange}
+            returnKeyType="search"
+            onSubmitEditing={() => fetchSearch(query, selectedGenre)}
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => handleSearch("")}>
+            <TouchableOpacity onPress={() => handleQueryChange("")}>
               <X size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
           )}
@@ -77,7 +111,6 @@ export default function BrowseScreen({ navigation }: any) {
                 onPress={() => {
                   const newG = isSelected ? null : item;
                   setSelectedGenre(newG);
-                  handleSearch(newG || query || "Action");
                 }}
               >
                 <Text style={[styles.genreText, isSelected && styles.activeGenreText]}>{item}</Text>
@@ -91,31 +124,30 @@ export default function BrowseScreen({ navigation }: any) {
       {loading ? (
         <View style={styles.centerLoader}>
           <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Searching anime database...</Text>
         </View>
       ) : results.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Search Anime</Text>
+          <Compass size={40} color={COLORS.textDark} />
+          <Text style={styles.emptyTitle}>No Results Found</Text>
           <Text style={styles.emptySubtitle}>
-            Type any anime name or select a genre above to browse available titles.
+            Try searching for a different anime title or clearing genre filters.
           </Text>
         </View>
       ) : (
         <FlatList
           data={results}
           numColumns={2}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, idx) => String(item.id || idx)}
           contentContainerStyle={styles.gridContent}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.gridCard}
               onPress={() => navigation.navigate("AnimeDetails", { id: item.id, anime: item })}
             >
-              <Image
-                source={{ uri: item.coverImage?.large || item.coverImage?.medium || item.poster }}
-                style={styles.gridImage}
-              />
+              <Image source={{ uri: getImageUri(item) }} style={styles.gridImage} />
               <Text style={styles.gridTitle} numberOfLines={2}>
-                {item.title?.english || item.title?.romaji || item.name || "Anime"}
+                {getTitleString(item)}
               </Text>
             </TouchableOpacity>
           )}
@@ -129,7 +161,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    paddingTop: 16,
+    paddingTop: 48,
   },
   searchHeader: {
     paddingHorizontal: 16,
@@ -150,7 +182,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: COLORS.text,
-    fontSize: 15,
+    fontSize: 14,
   },
   genrePill: {
     backgroundColor: COLORS.surface,
@@ -178,6 +210,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  loadingText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginTop: 8,
+  },
   emptyState: {
     flex: 1,
     justifyContent: "center",
@@ -188,12 +225,13 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 18,
     fontWeight: "800",
-    marginBottom: 6,
+    marginTop: 12,
   },
   emptySubtitle: {
     color: COLORS.textMuted,
     fontSize: 13,
     textAlign: "center",
+    marginTop: 4,
   },
   gridContent: {
     paddingHorizontal: 10,

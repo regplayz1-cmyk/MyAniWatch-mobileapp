@@ -67,6 +67,20 @@ export async function apiGetMe() {
   return request("/api/auth/me");
 }
 
+export async function apiUpdateAvatar(userId: string, avatarUrl: string) {
+  return request("/api/user/avatar", {
+    method: "POST",
+    body: JSON.stringify({ userId, avatarUrl }),
+  });
+}
+
+export async function apiTogglePrivacy(userId: string) {
+  return request("/api/profile/privacy", {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
+}
+
 // ── Anime & Search Services ──
 export async function apiGetTrending() {
   return request("/api/anime/trending");
@@ -76,8 +90,11 @@ export async function apiGetPopular() {
   return request("/api/anime/popular");
 }
 
-export async function apiSearchAnime(query: string, page: number = 1) {
-  return request(`/api/anime/search?query=${encodeURIComponent(query)}&page=${page}`);
+export async function apiSearchAnime(query: string, page: number = 1, genre?: string) {
+  let url = `/api/anime/search?page=${page}`;
+  if (query) url += `&query=${encodeURIComponent(query)}`;
+  if (genre) url += `&genre=${encodeURIComponent(genre)}`;
+  return request(url);
 }
 
 export async function apiGetAnimeDetails(id: string) {
@@ -85,13 +102,87 @@ export async function apiGetAnimeDetails(id: string) {
 }
 
 export async function apiGetEpisodes(animeId: string) {
-  return request(`/api/v2/hianime/anime/${animeId}/episodes`);
+  return request(`/api/v2/hianime/anime/${animeId}/episodes`).catch(() => ({ episodes: [] }));
 }
 
-export async function apiGetStreamSources(animeId: string, episodeNumber: number, server?: string) {
-  let url = `/api/v2/hianime/episode/sources?animeId=${encodeURIComponent(animeId)}&number=${episodeNumber}`;
-  if (server) url += `&server=${server}`;
-  return request(url);
+// ── Multi-Provider Stream Sources (Anikai, Anizone, AniBD, 2Dhive, Senshi, Miruro, HiAnime) ──
+export async function apiGetAllStreamSources(anilistId: string | number, episodeNumber: number, title?: string, malId?: number) {
+  const sources: Array<{ name: string; url: string; type: "hls" | "iframe"; priority: number }> = [];
+  const ep = episodeNumber || 1;
+  const animeTitle = title ? title.replace(/-/g, " ").trim() : "";
+
+  // 1. Fetch Anizone HLS
+  try {
+    const anizoneRes = await request(`/api/anizone/stream?title=${encodeURIComponent(animeTitle)}&anilistId=${anilistId || ""}&episode=${ep}`);
+    if (anizoneRes?.url) {
+      sources.push({ name: "Anizone (HLS)", url: anizoneRes.url, type: "hls", priority: 9700 });
+    }
+  } catch {}
+
+  // 2. Fetch Anikai Sources
+  try {
+    const anikaiRes = await request(`/api/anikai/sources?title=${encodeURIComponent(animeTitle)}&ep=${ep}`);
+    if (anikaiRes?.sources) {
+      const allSub = [...(anikaiRes.sources.hsub || []), ...(anikaiRes.sources.sub || [])];
+      allSub.forEach((s: any, idx: number) => {
+        if (s.url) {
+          sources.push({ name: `${s.name || "Anikai"} (Sub)`, url: s.url, type: "iframe", priority: 9000 - idx });
+        }
+      });
+    }
+  } catch {}
+
+  // 3. Fetch AniBD HLS
+  try {
+    const anibdRes = await request(`/api/anibd/stream?anilistId=${anilistId}&episode=${ep}`);
+    if (anibdRes?.url) {
+      const ref = encodeURIComponent(anibdRes.referer || "https://playeng.animeapps.top/");
+      sources.push({
+        name: "AniBD (HardSub)",
+        url: `${API_BASE_URL}/api/miruro-hls?ref=${ref}&url=${encodeURIComponent(anibdRes.url)}`,
+        type: "hls",
+        priority: 9500,
+      });
+    }
+  } catch {}
+
+  // 4. Fetch 2Dhive
+  if (malId) {
+    try {
+      sources.push({
+        name: "2Dhive (Sub)",
+        url: `${API_BASE_URL}/api/hdhive/stream?malId=${malId}&episode=${ep}&lang=sub`,
+        type: "hls",
+        priority: 8600,
+      });
+    } catch {}
+  }
+
+  // 5. Fetch Senshi HLS
+  if (malId) {
+    try {
+      sources.push({
+        name: "Senshi (HLS)",
+        url: `${API_BASE_URL}/api/senshi/stream?malId=${malId}&episode=${ep}`,
+        type: "hls",
+        priority: 8800,
+      });
+    } catch {}
+  }
+
+  // 6. Fetch MegaPlay Fallback
+  if (anilistId) {
+    sources.push({
+      name: "MegaPlay Server",
+      url: `https://megaplay.buzz/stream/ani/${anilistId}/${ep}/sub`,
+      type: "iframe",
+      priority: 1800,
+    });
+  }
+
+  // Sort by highest priority
+  sources.sort((a, b) => b.priority - a.priority);
+  return sources;
 }
 
 // ── Watched & History Services ──

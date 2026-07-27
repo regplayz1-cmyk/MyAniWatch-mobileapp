@@ -11,36 +11,30 @@ import {
 import { WebView } from "react-native-webview";
 import { COLORS } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
-import { apiGetStreamSources, apiSaveWatchedProgress } from "../services/api";
-import { ChevronLeft, ChevronRight, Server, Play, AlertCircle } from "lucide-react-native";
+import { apiGetAllStreamSources, apiSaveWatchedProgress } from "../services/api";
+import { ChevronLeft, ChevronRight, Server, AlertCircle } from "lucide-react-native";
 
 const { width } = Dimensions.get("window");
 
 export default function WatchScreen({ route, navigation }: any) {
   const { user } = useAuth();
-  const { animeId, episodeNumber = 1, animeTitle = "Anime" } = route.params || {};
+  const { animeId, episodeNumber = 1, animeTitle = "Anime", malId } = route.params || {};
 
   const [currentEp, setCurrentEp] = useState(episodeNumber);
-  const [sources, setSources] = useState<any[]>([]);
-  const [activeSource, setActiveSource] = useState<string | null>(null);
+  const [sources, setSources] = useState<Array<{ name: string; url: string; type: "hls" | "iframe" }>>([]);
+  const [activeSourceIdx, setActiveSourceIdx] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [activeServer, setActiveServer] = useState("hd-main");
 
   useEffect(() => {
-    loadStream();
-  }, [animeId, currentEp, activeServer]);
+    loadStreamSources();
+  }, [animeId, currentEp]);
 
-  const loadStream = async () => {
+  const loadStreamSources = async () => {
     try {
       setLoading(true);
-      const res = await apiGetStreamSources(String(animeId), currentEp, activeServer).catch(() => null);
-      if (res?.sources && res.sources.length > 0) {
-        setSources(res.sources);
-        setActiveSource(res.sources[0].url);
-      } else {
-        // Fallback embed player
-        setActiveSource(`https://myaniwatch-ashen.vercel.app/api/v2/hianime/episode/sources?animeId=${animeId}&number=${currentEp}`);
-      }
+      const resSources = await apiGetAllStreamSources(animeId, currentEp, animeTitle, malId);
+      setSources(resSources);
+      setActiveSourceIdx(0);
 
       // Save watch history
       if (user?.id) {
@@ -55,15 +49,17 @@ export default function WatchScreen({ route, navigation }: any) {
           duration: 1440,
         }).catch(() => {});
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      console.error("Stream loading error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getPlayerHtml = (sourceUrl: string) => {
-    if (sourceUrl.includes(".m3u8") || sourceUrl.includes("/api/miruro-hls") || sourceUrl.includes("/api/extract-hls")) {
+  const activeSource = sources[activeSourceIdx];
+
+  const getPlayerHtml = (sourceUrl: string, type: string) => {
+    if (type === "hls" || sourceUrl.includes(".m3u8") || sourceUrl.includes("/api/miruro-hls") || sourceUrl.includes("/api/senshi") || sourceUrl.includes("/api/hdhive")) {
       return `
         <!DOCTYPE html>
         <html>
@@ -98,7 +94,7 @@ export default function WatchScreen({ route, navigation }: any) {
     return null;
   };
 
-  const playerHtml = activeSource ? getPlayerHtml(activeSource) : null;
+  const playerHtml = activeSource ? getPlayerHtml(activeSource.url, activeSource.type) : null;
 
   return (
     <View style={styles.container}>
@@ -117,11 +113,12 @@ export default function WatchScreen({ route, navigation }: any) {
         {loading ? (
           <View style={styles.playerLoader}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading Stream Sources...</Text>
+            <Text style={styles.loadingText}>Fetching Stream Servers (Anizone, Anikai, AniBD)...</Text>
           </View>
         ) : activeSource ? (
           <WebView
-            source={playerHtml ? { html: playerHtml } : { uri: activeSource }}
+            key={`${activeSource.url}-${currentEp}`}
+            source={playerHtml ? { html: playerHtml } : { uri: activeSource.url }}
             style={styles.webview}
             allowsInlineMediaPlayback
             allowsFullscreenVideo
@@ -132,7 +129,7 @@ export default function WatchScreen({ route, navigation }: any) {
         ) : (
           <View style={styles.playerLoader}>
             <AlertCircle size={32} color={COLORS.danger} />
-            <Text style={styles.errorText}>Stream source unavailable for Episode {currentEp}</Text>
+            <Text style={styles.errorText}>No available stream servers found for Episode {currentEp}</Text>
           </View>
         )}
       </View>
@@ -164,30 +161,31 @@ export default function WatchScreen({ route, navigation }: any) {
         </View>
 
         {/* Server Selector Tabs */}
-        <View style={styles.serverSection}>
-          <View style={styles.serverTitleRow}>
-            <Server size={16} color={COLORS.primary} />
-            <Text style={styles.serverTitle}>Streaming Server</Text>
-          </View>
+        {sources.length > 0 && (
+          <View style={styles.serverSection}>
+            <View style={styles.serverTitleRow}>
+              <Server size={16} color={COLORS.primary} />
+              <Text style={styles.serverTitle}>Available Servers ({sources.length})</Text>
+            </View>
 
-          <View style={styles.serverRow}>
-            {[
-              { id: "hd-main", label: "HD Main" },
-              { id: "backup", label: "Backup Stream" },
-              { id: "anizone", label: "Anizone HD" },
-            ].map((srv) => (
-              <TouchableOpacity
-                key={srv.id}
-                style={[styles.serverTab, activeServer === srv.id && styles.activeServerTab]}
-                onPress={() => setActiveServer(srv.id)}
-              >
-                <Text style={[styles.serverTabText, activeServer === srv.id && styles.activeServerTabText]}>
-                  {srv.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serverRow}>
+              {sources.map((srv, idx) => {
+                const isActive = activeSourceIdx === idx;
+                return (
+                  <TouchableOpacity
+                    key={`${srv.name}-${idx}`}
+                    style={[styles.serverTab, isActive && styles.activeServerTab]}
+                    onPress={() => setActiveSourceIdx(idx)}
+                  >
+                    <Text style={[styles.serverTabText, isActive && styles.activeServerTabText]}>
+                      {srv.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
-        </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -230,16 +228,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#000",
+    paddingHorizontal: 24,
   },
   loadingText: {
     color: COLORS.textMuted,
     fontSize: 12,
     marginTop: 8,
+    textAlign: "center",
   },
   errorText: {
     color: COLORS.danger,
     fontSize: 13,
     marginTop: 8,
+    textAlign: "center",
   },
   webview: {
     flex: 1,
@@ -309,13 +310,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   serverTab: {
-    flex: 1,
-    alignItems: "center",
+    paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: COLORS.card,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+    marginRight: 8,
   },
   activeServerTab: {
     backgroundColor: COLORS.primary,
