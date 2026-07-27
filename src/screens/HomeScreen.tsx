@@ -9,11 +9,51 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
+  Dimensions,
 } from "react-native";
 import { COLORS } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { apiGetTrending, apiGetPopular, apiGetRecentlyWatched } from "../services/api";
-import { Play, TrendingUp, Sparkles, Clock, ChevronRight } from "lucide-react-native";
+import { Play, TrendingUp, Sparkles, Clock, Flame } from "lucide-react-native";
+
+const { width } = Dimensions.get("window");
+
+const extractAnimeList = (res: any): any[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.results)) return res.results;
+  if (Array.isArray(res.data?.media)) return res.data.media;
+  if (Array.isArray(res.animes)) return res.animes;
+  if (Array.isArray(res.trendingAnimes)) return res.trendingAnimes;
+  if (Array.isArray(res.topAiringAnimes)) return res.topAiringAnimes;
+  return [];
+};
+
+const getImageUri = (item: any): string => {
+  if (!item) return "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500";
+  return (
+    item.coverImage?.extraLarge ||
+    item.coverImage?.large ||
+    item.coverImage?.medium ||
+    item.poster ||
+    item.bannerImage ||
+    item.image ||
+    item.thumbnail ||
+    "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500"
+  );
+};
+
+const getTitleString = (item: any): string => {
+  if (!item) return "Anime";
+  if (typeof item.title === "string") return item.title;
+  return (
+    item.title?.english ||
+    item.title?.romaji ||
+    item.title?.native ||
+    item.name ||
+    "Featured Anime"
+  );
+};
 
 export default function HomeScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -27,12 +67,13 @@ export default function HomeScreen({ navigation }: any) {
     try {
       setLoading(true);
       const [trendRes, popRes] = await Promise.all([
-        apiGetTrending().catch(() => ({ data: { media: [] } })),
-        apiGetPopular().catch(() => ({ data: { media: [] } })),
+        apiGetTrending().catch(() => null),
+        apiGetPopular().catch(() => null),
       ]);
 
-      const trendItems = trendRes.data?.media || trendRes.results || [];
-      const popItems = popRes.data?.media || popRes.results || [];
+      const trendItems = extractAnimeList(trendRes);
+      const popItems = extractAnimeList(popRes);
+
       setTrending(trendItems);
       setPopular(popItems);
 
@@ -40,8 +81,8 @@ export default function HomeScreen({ navigation }: any) {
         const watchRes = await apiGetRecentlyWatched(user.id, 5).catch(() => ({ items: [] }));
         setContinueWatching(watchRes.items || []);
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      console.error("Home load error:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -52,20 +93,40 @@ export default function HomeScreen({ navigation }: any) {
     loadHomeData();
   }, [user?.id]);
 
-  const heroItem = trending[0];
+  const heroItem = trending[0] || popular[0];
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadHomeData(); }} tintColor={COLORS.primary} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            loadHomeData();
+          }}
+          tintColor={COLORS.primary}
+        />
+      }
     >
       {loading && !refreshing ? (
         <View style={styles.loaderCenter}>
           <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingSub}>Fetching latest anime streams...</Text>
         </View>
       ) : (
         <>
+          {/* Header Bar */}
+          <View style={styles.headerBar}>
+            <View>
+              <Text style={styles.headerTitle}>MyAniWatch</Text>
+              <Text style={styles.headerSubtitle}>
+                {user ? `Welcome back, ${user.username}!` : "Explore top anime series"}
+              </Text>
+            </View>
+          </View>
+
           {/* Hero Banner */}
           {heroItem && (
             <TouchableOpacity
@@ -73,18 +134,15 @@ export default function HomeScreen({ navigation }: any) {
               style={styles.heroCard}
               onPress={() => navigation.navigate("AnimeDetails", { id: heroItem.id, anime: heroItem })}
             >
-              <Image
-                source={{ uri: heroItem.bannerImage || heroItem.coverImage?.large || heroItem.coverImage?.medium }}
-                style={styles.heroImage}
-              />
+              <Image source={{ uri: getImageUri(heroItem) }} style={styles.heroImage} />
               <View style={styles.heroOverlay} />
               <View style={styles.heroContent}>
                 <View style={styles.badge}>
-                  <Sparkles size={12} color={COLORS.secondary} />
-                  <Text style={styles.badgeText}>FEATURED</Text>
+                  <Flame size={12} color={COLORS.secondary} />
+                  <Text style={styles.badgeText}>TRENDING #1</Text>
                 </View>
                 <Text style={styles.heroTitle} numberOfLines={2}>
-                  {heroItem.title?.english || heroItem.title?.romaji || "Anime"}
+                  {getTitleString(heroItem)}
                 </Text>
                 <TouchableOpacity
                   style={styles.watchNowBtn}
@@ -113,15 +171,21 @@ export default function HomeScreen({ navigation }: any) {
               <FlatList
                 horizontal
                 data={continueWatching}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => item.id || String(Math.random())}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 16 }}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.cwCard}
-                    onPress={() => navigation.navigate("Watch", { animeId: item.animeId, episodeNumber: item.episodeNumber })}
+                    onPress={() =>
+                      navigation.navigate("Watch", {
+                        animeId: item.animeId,
+                        episodeNumber: item.episodeNumber,
+                        animeTitle: item.animeTitle,
+                      })
+                    }
                   >
-                    <Image source={{ uri: item.thumbnail }} style={styles.cwImage} />
+                    <Image source={{ uri: item.thumbnail || getImageUri(item) }} style={styles.cwImage} />
                     <View style={styles.cwPlayOverlay}>
                       <Play size={18} color={COLORS.text} fill={COLORS.text} />
                     </View>
@@ -129,7 +193,7 @@ export default function HomeScreen({ navigation }: any) {
                       <Text style={styles.cwBadgeText}>EP {item.episodeNumber}</Text>
                     </View>
                     <View style={styles.cwProgressBar}>
-                      <View style={[styles.cwProgressFill, { width: `${item.progressPct || 0}%` }]} />
+                      <View style={[styles.cwProgressFill, { width: `${item.progressPct || 50}%` }]} />
                     </View>
                   </TouchableOpacity>
                 )}
@@ -146,24 +210,28 @@ export default function HomeScreen({ navigation }: any) {
               </View>
             </View>
 
-            <FlatList
-              horizontal
-              data={trending}
-              keyExtractor={(item) => String(item.id)}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.animeCard}
-                  onPress={() => navigation.navigate("AnimeDetails", { id: item.id, anime: item })}
-                >
-                  <Image source={{ uri: item.coverImage?.large || item.coverImage?.medium }} style={styles.animeImage} />
-                  <Text style={styles.animeTitle} numberOfLines={2}>
-                    {item.title?.english || item.title?.romaji || "Anime"}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
+            {trending.length === 0 ? (
+              <Text style={styles.emptySectionText}>No trending anime available at the moment.</Text>
+            ) : (
+              <FlatList
+                horizontal
+                data={trending}
+                keyExtractor={(item, index) => String(item.id || index)}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.animeCard}
+                    onPress={() => navigation.navigate("AnimeDetails", { id: item.id, anime: item })}
+                  >
+                    <Image source={{ uri: getImageUri(item) }} style={styles.animeImage} />
+                    <Text style={styles.animeTitle} numberOfLines={2}>
+                      {getTitleString(item)}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
 
           {/* Popular Section */}
@@ -175,24 +243,28 @@ export default function HomeScreen({ navigation }: any) {
               </View>
             </View>
 
-            <FlatList
-              horizontal
-              data={popular}
-              keyExtractor={(item) => String(item.id)}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.animeCard}
-                  onPress={() => navigation.navigate("AnimeDetails", { id: item.id, anime: item })}
-                >
-                  <Image source={{ uri: item.coverImage?.large || item.coverImage?.medium }} style={styles.animeImage} />
-                  <Text style={styles.animeTitle} numberOfLines={2}>
-                    {item.title?.english || item.title?.romaji || "Anime"}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
+            {popular.length === 0 ? (
+              <Text style={styles.emptySectionText}>No popular anime available at the moment.</Text>
+            ) : (
+              <FlatList
+                horizontal
+                data={popular}
+                keyExtractor={(item, index) => String(item.id || index)}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.animeCard}
+                    onPress={() => navigation.navigate("AnimeDetails", { id: item.id, anime: item })}
+                  >
+                    <Image source={{ uri: getImageUri(item) }} style={styles.animeImage} />
+                    <Text style={styles.animeTitle} numberOfLines={2}>
+                      {getTitleString(item)}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
         </>
       )}
@@ -208,9 +280,30 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 40,
   },
+  headerBar: {
+    paddingTop: 48,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  headerTitle: {
+    color: COLORS.primary,
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    marginTop: 2,
+  },
   loaderCenter: {
-    paddingTop: 100,
+    paddingTop: 120,
     alignItems: "center",
+  },
+  loadingSub: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    marginTop: 12,
   },
   heroCard: {
     height: 240,
@@ -226,7 +319,7 @@ const styles = StyleSheet.create({
   },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(9, 10, 15, 0.6)",
+    backgroundColor: "rgba(9, 10, 15, 0.65)",
   },
   heroContent: {
     position: "absolute",
@@ -295,6 +388,11 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 12,
     fontWeight: "800",
+  },
+  emptySectionText: {
+    color: COLORS.textDark,
+    fontSize: 13,
+    paddingHorizontal: 16,
   },
   cwCard: {
     width: 140,
