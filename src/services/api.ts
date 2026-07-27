@@ -15,7 +15,6 @@ async function request(endpoint: string, options: RequestInit = {}) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "x-app-client": "myaniwatch-mobile",
-    "x-api-key": "maw_live_8f9e7d6c5b4a3f2e1d0c9b8a7f6e5d4c",
     "User-Agent": "MyAniWatch-Mobile/1.0.0 (Android; iOS)",
     ...(options.headers as Record<string, string>),
   };
