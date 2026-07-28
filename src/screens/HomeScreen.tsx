@@ -110,7 +110,7 @@ export default function HomeScreen({ navigation }: any) {
               <Clock size={12} color={COLORS.textMuted} />
               <Text style={styles.spotlightMetaText}>{item.episodes?.sub || item.episodes?.dub || 12} Episodes</Text>
             </View>
-            {item.status && (
+            {Boolean(item.status) && (
               <View style={styles.spotlightMetaItem}>
                 <Flame size={12} color={COLORS.secondary} />
                 <Text style={[styles.spotlightMetaText, { color: COLORS.secondary }]}>{item.status}</Text>
@@ -153,13 +153,13 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.posterContainer}>
           <Image source={{ uri: poster }} style={styles.posterImage} />
           <View style={styles.episodesBadge}>
-            {item.episodes?.sub && (
+            {Boolean(item.episodes?.sub && item.episodes.sub > 0) && (
               <View style={styles.epBadgeItem}>
                 <Subtitles size={10} color="#000" />
                 <Text style={styles.epBadgeText}>{item.episodes.sub}</Text>
               </View>
             )}
-            {item.episodes?.dub && (
+            {Boolean(item.episodes?.dub && item.episodes.dub > 0) && (
               <View style={[styles.epBadgeItem, { backgroundColor: COLORS.secondary }]}>
                 <Mic size={10} color="#000" />
                 <Text style={styles.epBadgeText}>{item.episodes.dub}</Text>
