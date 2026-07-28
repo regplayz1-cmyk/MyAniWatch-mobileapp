@@ -176,7 +176,8 @@ export default function WatchScreen({ route, navigation }: any) {
       sourceUrl.includes("/api/senshi") ||
       sourceUrl.includes("/api/hdhive") ||
       sourceUrl.includes("/api/anizone") ||
-      sourceUrl.includes("/api/anibd");
+      sourceUrl.includes("/api/anibd") ||
+      sourceUrl.includes("master.m3u8");
 
     if (isHls) {
       return `
@@ -187,18 +188,13 @@ export default function WatchScreen({ route, navigation }: any) {
           <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body, html { width: 100%; height: 100%; background: #090a0f; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+            body, html { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
             #player-wrapper { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000; }
             video { width: 100%; height: 100%; object-fit: contain; }
-            .badge-bar { position: absolute; top: 12px; left: 12px; z-index: 10; display: flex; align-items: center; gap: 8px; pointer-events: none; }
-            .badge { background: rgba(139, 92, 246, 0.9); color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; backdrop-filter: blur(8px); }
           </style>
         </head>
         <body>
           <div id="player-wrapper">
-            <div class="badge-bar">
-              <div class="badge">MyAniWatch HLS Player</div>
-            </div>
             <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
           </div>
           <script>

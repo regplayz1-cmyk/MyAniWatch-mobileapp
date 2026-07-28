@@ -163,26 +163,22 @@ export async function apiGetAllStreamSources(anilistId: string | number, episode
     const anikaiRes = await request(`/api/anikai/sources?title=${encodeURIComponent(animeTitle)}&ep=${ep}`);
     if (anikaiRes?.sources) {
       const allSub = [...(anikaiRes.sources.hsub || []), ...(anikaiRes.sources.sub || [])];
-      for (let idx = 0; idx < allSub.length; idx++) {
-        const s = allSub[idx];
-        if (s.url) {
-          try {
-            const extData = await apiExtractHls(s.url);
-            if (extData?.hls) {
-              sources.push({
-                name: `${s.name || "HD-Server"} (HLS)`,
-                url: extData.hls,
-                type: "hls",
-                priority: 9600 - idx,
-              });
-            } else {
-              sources.push({ name: `${s.name || "Anikai"} (Sub)`, url: s.url, type: "iframe", priority: 8000 - idx });
-            }
-          } catch {
-            sources.push({ name: `${s.name || "Anikai"} (Sub)`, url: s.url, type: "iframe", priority: 8000 - idx });
+      const extractedPromises = allSub.slice(0, 4).map(async (s: any, idx: number) => {
+        if (!s.url) return null;
+        try {
+          if (s.url.includes(".m3u8") || s.url.includes("master.m3u8") || s.url.includes("/api/")) {
+            return { name: `${s.name || "HD-Server"} (HLS)`, url: s.url, type: "hls" as const, priority: 9600 - idx };
           }
-        }
-      }
+          const extData = await apiExtractHls(s.url);
+          if (extData?.hls) {
+            return { name: `${s.name || "HD-Server"} (HLS)`, url: extData.hls, type: "hls" as const, priority: 9600 - idx };
+          }
+        } catch {}
+        return { name: `${s.name || "HD-Server"} (Server)`, url: s.url, type: "iframe" as const, priority: 7000 - idx };
+      });
+
+      const extractedResults = (await Promise.all(extractedPromises)).filter(Boolean);
+      sources.push(...(extractedResults as any[]));
     }
   } catch {}
 
