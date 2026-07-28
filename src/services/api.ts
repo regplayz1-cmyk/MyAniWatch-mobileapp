@@ -87,7 +87,7 @@ export async function apiGetTrending() {
 }
 
 export async function apiGetPopular() {
-  return request("/api/anime/popular");
+  return request("/api/anime/search?sort=POPULARITY_DESC");
 }
 
 export async function apiSearchAnime(query: string, page: number = 1, genre?: string) {
@@ -215,7 +215,7 @@ export async function apiDeleteWatchedItem(id: string, userId: string) {
 
 // ── Watchlist Services ──
 export async function apiGetWatchlist(userId: string) {
-  return request(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
+  return request(`/api/bookmarks?userId=${encodeURIComponent(userId)}`);
 }
 
 export async function apiToggleWatchlist(animeId: string, animeTitle: string, thumbnail: string, status: string = "watching") {
