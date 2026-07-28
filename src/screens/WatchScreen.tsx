@@ -465,13 +465,39 @@ export default function WatchScreen({ route, navigation }: any) {
             else wrap.requestFullscreen();
           });
 
-          var videoSrc = '${fullSourceUrl}';
+          const rawUrl = '${sourceUrl}';
+          var videoSrc = rawUrl.startsWith("http") && !rawUrl.includes("/api/")
+            ? "https://myaniwatch-ashen.vercel.app/api/miruro-hls?url=" + encodeURIComponent(rawUrl)
+            : (rawUrl.startsWith("http") ? rawUrl : "https://myaniwatch-ashen.vercel.app" + (rawUrl.startsWith("/") ? "" : "/") + rawUrl);
+
           if (Hls.isSupported()) {
-            var hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+            var hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+              xhrSetup: function(xhr, url) {
+                xhr.setRequestHeader('Referer', 'https://myaniwatch-ashen.vercel.app/');
+                xhr.setRequestHeader('x-app-client', 'myaniwatch-mobile');
+              }
+            });
             hls.loadSource(videoSrc);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, function() {
-              video.play().catch(function() {});
+              video.play().catch(function(e) { console.log("Autoplay error:", e); });
+            });
+            hls.on(Hls.Events.ERROR, function(event, data) {
+              if (data.fatal) {
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    hls.startLoad();
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    hls.recoverMediaError();
+                    break;
+                  default:
+                    hls.destroy();
+                    break;
+                }
+              }
             });
           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = videoSrc;
