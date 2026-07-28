@@ -165,13 +165,20 @@ export default function WatchScreen({ route, navigation }: any) {
   const activeSource = sources[activeSourceIdx];
 
   const getPlayerHtml = (sourceUrl: string, type: string) => {
-    if (
+    const fullSourceUrl = sourceUrl.startsWith("http")
+      ? sourceUrl
+      : `https://myaniwatch-ashen.vercel.app${sourceUrl.startsWith("/") ? "" : "/"}${sourceUrl}`;
+
+    const isHls =
       type === "hls" ||
       sourceUrl.includes(".m3u8") ||
       sourceUrl.includes("/api/miruro-hls") ||
       sourceUrl.includes("/api/senshi") ||
-      sourceUrl.includes("/api/hdhive")
-    ) {
+      sourceUrl.includes("/api/hdhive") ||
+      sourceUrl.includes("/api/anizone") ||
+      sourceUrl.includes("/api/anibd");
+
+    if (isHls) {
       return `
         <!DOCTYPE html>
         <html>
@@ -179,21 +186,49 @@ export default function WatchScreen({ route, navigation }: any) {
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
           <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; background: #000; }
-            body, html { width: 100%; height: 100%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body, html { width: 100%; height: 100%; background: #090a0f; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+            #player-wrapper { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000; }
             video { width: 100%; height: 100%; object-fit: contain; }
+            .badge-bar { position: absolute; top: 12px; left: 12px; z-index: 10; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+            .badge { background: rgba(139, 92, 246, 0.9); color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; backdrop-filter: blur(8px); }
           </style>
         </head>
         <body>
-          <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
+          <div id="player-wrapper">
+            <div class="badge-bar">
+              <div class="badge">MyAniWatch HLS Player</div>
+            </div>
+            <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
+          </div>
           <script>
             var video = document.getElementById('video');
-            var videoSrc = '${sourceUrl}';
+            var videoSrc = '${fullSourceUrl}';
             if (Hls.isSupported()) {
-              var hls = new Hls();
+              var hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true
+              });
               hls.loadSource(videoSrc);
               hls.attachMedia(video);
-              hls.on(Hls.Events.MANIFEST_PARSED, function() { video.play(); });
+              hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                video.play().catch(function() {});
+              });
+              hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                  switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                      hls.startLoad();
+                      break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                      hls.recoverMediaError();
+                      break;
+                    default:
+                      hls.destroy();
+                      break;
+                  }
+                }
+              });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
               video.src = videoSrc;
               video.addEventListener('loadedmetadata', function() { video.play(); });
@@ -229,12 +264,16 @@ export default function WatchScreen({ route, navigation }: any) {
           {loading ? (
             <View style={styles.playerLoader}>
               <ActivityIndicator size="large" color={COLORS.primary} />
-              <Text style={styles.loadingText}>Fetching Stream Servers (Anizone, Anikai, AniBD)...</Text>
+              <Text style={styles.loadingText}>Fetching Stream Servers (Anizone, AniBD, 2Dhive)...</Text>
             </View>
           ) : activeSource ? (
             <WebView
               key={`${activeSource.url}-${currentEp}`}
-              source={playerHtml ? { html: playerHtml } : { uri: activeSource.url }}
+              source={
+                playerHtml
+                  ? { html: playerHtml, baseUrl: "https://myaniwatch-ashen.vercel.app" }
+                  : { uri: activeSource.url }
+              }
               style={styles.webview}
               allowsInlineMediaPlayback
               allowsFullscreenVideo
