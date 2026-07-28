@@ -15,11 +15,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Play, Bookmark, Flag, Star, Tv, Clock, Calendar, Check, MoreHorizontal } from "lucide-react-native";
 import { COLORS } from "../theme/colors";
 import { apiGetAnimeDetails, apiGetEpisodes, apiToggleWatchlist } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 const { width } = Dimensions.get("window");
 
 export default function AnimeDetailsScreen({ route, navigation }: any) {
-  const { id } = route.params;
+  const { id } = route.params || {};
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<any>(null);
@@ -56,10 +58,11 @@ export default function AnimeDetailsScreen({ route, navigation }: any) {
     try {
       if (!details?.anime?.info) return;
       const { name, poster } = details.anime.info;
-      await apiToggleWatchlist(id, name, poster, isWatchlisted ? "removed" : "watching");
+      const nextStatus = isWatchlisted ? "removed" : "watching";
+      await apiToggleWatchlist(id, name, poster, nextStatus, user?.id || "default");
       setIsWatchlisted(!isWatchlisted);
     } catch (err) {
-      console.error("Watchlist error", err);
+      console.error("Watchlist toggle error", err);
     }
   };
 
@@ -477,14 +480,15 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   overviewContainer: {
-    flexDirection: "row",
+    flexDirection: "column",
     gap: 16,
   },
   detailsCard: {
-    flex: 1,
+    width: "100%",
+    alignSelf: "flex-start",
     backgroundColor: "rgba(255,255,255,0.03)",
-    padding: 12,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
@@ -503,20 +507,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
-    marginTop: 4,
+    marginTop: 6,
   },
   genreBadge: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    backgroundColor: "rgba(139, 92, 246, 0.15)",
+    borderColor: "rgba(139, 92, 246, 0.3)",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   genreText: {
-    color: COLORS.text,
+    color: COLORS.primary,
     fontSize: 11,
+    fontWeight: "600",
   },
   synopsisContainer: {
-    flex: 1.5,
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
   },
   synopsisTitle: {
     color: COLORS.text,

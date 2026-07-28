@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { COLORS } from "../theme/colors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import {
   apiGetProfile,
@@ -79,6 +80,7 @@ export default function ProfileScreen({ navigation }: any) {
     if (!user?.id) return;
     try {
       setLoading(true);
+      const savedBio = await AsyncStorage.getItem(`bio_${user.id}`);
       const [profRes, statsRes, histRes, watchRes] = await Promise.all([
         apiGetProfile(user.id).catch(() => ({ user: {} })),
         apiGetWatchStats(user.id).catch(() => ({ data: { episodes: 0, minutes: 0 } })),
@@ -86,7 +88,8 @@ export default function ProfileScreen({ navigation }: any) {
         apiGetWatchlist(user.id).catch(() => ({ items: [] })),
       ]);
 
-      setProfile(profRes.user || {});
+      const mergedBio = savedBio || profRes.user?.bio || "Anime enthusiast. Watching everything.";
+      setProfile({ ...(profRes.user || {}), bio: mergedBio });
       setStats({
         episodes: statsRes.data?.episodes || 0,
         minutes: statsRes.data?.minutes || 0,
@@ -96,7 +99,7 @@ export default function ProfileScreen({ navigation }: any) {
       setIsPrivate(profRes.user?.isPrivate || false);
       
       setEditAvatarUrl(profRes.user?.avatar || user?.avatar || "");
-      setEditBio(profRes.user?.bio || "");
+      setEditBio(mergedBio);
     } catch (err) {
       console.error("Profile load error:", err);
     } finally {
@@ -149,11 +152,12 @@ export default function ProfileScreen({ navigation }: any) {
     try {
       setSavingProfile(true);
       await apiUpdateAvatar(user.id, editAvatarUrl);
-      // Bio update is not available in the API right now, simulating it.
+      if (editBio) {
+        await AsyncStorage.setItem(`bio_${user.id}`, editBio);
+      }
       setProfile((prev: any) => ({ ...prev, avatar: editAvatarUrl, bio: editBio }));
       setShowEditDrawer(false);
       Alert.alert("Success", "Profile updated successfully!");
-      loadData();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to update profile.");
     } finally {

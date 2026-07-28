@@ -25,6 +25,8 @@ import {
 import {
   MessageSquare,
   Heart,
+  ThumbsUp,
+  ThumbsDown,
   Pin,
   Trash2,
   ChevronDown,
@@ -96,9 +98,9 @@ const CommentSection = ({ postId, isExpanded }: { postId: string; isExpanded: bo
       await apiPostComment({
         animeId: `post-${postId}`,
         episode: 0,
-        text: commentText,
-        username: user.username,
-        avatar: user.avatar,
+        content: commentText.trim(),
+        authorName: user.username,
+        authorAvatar: user.avatar,
       });
       setCommentText('');
       loadComments();
@@ -315,11 +317,16 @@ export default function CommunityScreen() {
 
         <View style={styles.postFooter}>
           <TouchableOpacity style={styles.actionButton} onPress={() => handleLikePost(item.id)}>
-            <Heart size={20} color={isLiked ? COLORS.primary : COLORS.textMuted} fill={isLiked ? COLORS.primary : 'transparent'} />
+            <ThumbsUp size={18} color={isLiked ? COLORS.primary : COLORS.textMuted} fill={isLiked ? COLORS.primary : 'transparent'} />
             <Text style={[styles.actionText, isLiked && { color: COLORS.primary }]}>{item.upvotes || 0}</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={() => handleLikePost(item.id)}>
+            <ThumbsDown size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.actionButton} onPress={() => toggleComments(item.id)}>
-            <MessageSquare size={20} color={COLORS.textMuted} />
+            <MessageSquare size={18} color={COLORS.textMuted} />
             <Text style={styles.actionText}>Comments</Text>
           </TouchableOpacity>
         </View>

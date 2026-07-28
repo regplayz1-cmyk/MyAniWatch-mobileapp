@@ -116,7 +116,7 @@ export async function apiGetComments(animeId: string, episode: number) {
   return request(`/api/comments?animeId=${encodeURIComponent(animeId)}&episode=${episode}`);
 }
 
-export async function apiPostComment(data: { animeId: string; episode: number; text: string; username: string; avatar?: string; parentId?: string }) {
+export async function apiPostComment(data: { animeId: string; episode: number; content: string; authorName: string; authorAvatar?: string; isSpoiler?: boolean; parentCommentId?: string }) {
   return request("/api/comments", { method: "POST", body: JSON.stringify(data) });
 }
 
@@ -248,10 +248,10 @@ export async function apiGetWatchlist(userId: string) {
   return request(`/api/bookmarks?userId=${encodeURIComponent(userId)}`);
 }
 
-export async function apiToggleWatchlist(animeId: string, animeTitle: string, thumbnail: string, status: string = "watching") {
+export async function apiToggleWatchlist(animeId: string, animeTitle: string, thumbnail: string, status: string = "watching", userId?: string) {
   return request("/api/bookmarks", {
     method: "POST",
-    body: JSON.stringify({ animeId, animeTitle, thumbnail, status }),
+    body: JSON.stringify({ userId: userId || "default", animeId, animeTitle, thumbnail, status }),
   });
 }
 
