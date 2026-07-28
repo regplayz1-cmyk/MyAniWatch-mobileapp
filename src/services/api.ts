@@ -16,6 +16,8 @@ async function request(endpoint: string, options: RequestInit = {}) {
     "Content-Type": "application/json",
     "x-app-client": "myaniwatch-mobile",
     "User-Agent": "MyAniWatch-Mobile/1.0.0 (Android; iOS)",
+    "Referer": "https://myaniwatch-ashen.vercel.app/",
+    "Origin": "https://myaniwatch-ashen.vercel.app",
     ...(options.headers as Record<string, string>),
   };
 
@@ -135,6 +137,13 @@ export async function apiDeletePost(postId: string, authorName: string, authorRo
   return request(`/api/community/posts?id=${postId}&authorName=${encodeURIComponent(authorName)}&authorRole=${authorRole || ""}`, { method: "DELETE" });
 }
 
+export async function apiExtractHls(url: string) {
+  return request("/api/extract-hls", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
 // ── Multi-Provider Stream Sources (Anikai, Anizone, AniBD, 2Dhive, Senshi, Miruro, HiAnime) ──
 export async function apiGetAllStreamSources(anilistId: string | number, episodeNumber: number, title?: string, malId?: number) {
   const sources: Array<{ name: string; url: string; type: "hls" | "iframe"; priority: number }> = [];
@@ -149,16 +158,31 @@ export async function apiGetAllStreamSources(anilistId: string | number, episode
     }
   } catch {}
 
-  // 2. Fetch Anikai Sources
+  // 2. Fetch Anikai & Extract HLS
   try {
     const anikaiRes = await request(`/api/anikai/sources?title=${encodeURIComponent(animeTitle)}&ep=${ep}`);
     if (anikaiRes?.sources) {
       const allSub = [...(anikaiRes.sources.hsub || []), ...(anikaiRes.sources.sub || [])];
-      allSub.forEach((s: any, idx: number) => {
+      for (let idx = 0; idx < allSub.length; idx++) {
+        const s = allSub[idx];
         if (s.url) {
-          sources.push({ name: `${s.name || "Anikai"} (Sub)`, url: s.url, type: "iframe", priority: 9000 - idx });
+          try {
+            const extData = await apiExtractHls(s.url);
+            if (extData?.hls) {
+              sources.push({
+                name: `${s.name || "HD-Server"} (HLS)`,
+                url: extData.hls,
+                type: "hls",
+                priority: 9600 - idx,
+              });
+            } else {
+              sources.push({ name: `${s.name || "Anikai"} (Sub)`, url: s.url, type: "iframe", priority: 8000 - idx });
+            }
+          } catch {
+            sources.push({ name: `${s.name || "Anikai"} (Sub)`, url: s.url, type: "iframe", priority: 8000 - idx });
+          }
         }
-      });
+      }
     }
   } catch {}
 
