@@ -1,187 +1,448 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   FlatList,
   TouchableOpacity,
   TextInput,
-  StyleSheet,
+  Image,
   ActivityIndicator,
   Alert,
-} from "react-native";
-import { COLORS } from "../theme/colors";
-import { useAuth } from "../context/AuthContext";
-import { apiGetPosts, apiCreatePost, apiLikePost } from "../services/api";
-import { MessageSquare, ThumbsUp, Plus, Send, MessageCircle } from "lucide-react-native";
+  ScrollView,
+  RefreshControl,
+} from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { COLORS } from '../theme/colors';
+import {
+  apiGetPosts,
+  apiCreatePost,
+  apiLikePost,
+  apiDeletePost,
+  apiGetComments,
+  apiPostComment,
+} from '../services/api';
+import {
+  MessageSquare,
+  Heart,
+  Pin,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+} from 'lucide-react-native';
 
-const CATEGORIES = ["General", "Anime Discussion", "Bug Reports", "Recommendations", "Off-Topic"];
+const CATEGORIES = [
+  'All Topics',
+  'General',
+  'Anime Discussion',
+  'Recommendations',
+  'Bug Reports',
+  'Off-Topic',
+];
 
-export default function CommunityScreen() {
+const SpoilerText = ({ text }: { text: string }) => {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <TouchableOpacity onPress={() => setRevealed(!revealed)} activeOpacity={0.8}>
+      <Text style={[styles.postContent, !revealed && styles.spoilerHidden]}>
+        {revealed ? text : 'Tap to reveal spoiler'}
+      </Text>
+    </TouchableOpacity>
+  );
+};
+
+const PostContent = ({ content }: { content: string }) => {
+  const parts = content.split(/(\|\|.*?\|\|)/g);
+  return (
+    <Text style={styles.postContent}>
+      {parts.map((part, index) => {
+        if (part.startsWith('||') && part.endsWith('||')) {
+          return <SpoilerText key={index} text={part.slice(2, -2)} />;
+        }
+        return <Text key={index}>{part}</Text>;
+      })}
+    </Text>
+  );
+};
+
+const CommentSection = ({ postId, isExpanded }: { postId: string; isExpanded: boolean }) => {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [showCompose, setShowCompose] = useState(false);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [comments, setComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [commentText, setCommentText] = useState('');
 
-  const loadPosts = async () => {
+  useEffect(() => {
+    if (isExpanded) {
+      loadComments();
+    }
+  }, [isExpanded]);
+
+  const loadComments = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await apiGetPosts(selectedCategory || undefined);
-      setPosts(res.posts || []);
-    } catch {
-      // Ignore
+      const res = await apiGetComments(`post-${postId}`, 0);
+      setComments(res.data || []);
+    } catch (err) {
+      console.log('Failed to load comments');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadPosts();
-  }, [selectedCategory]);
-
-  const handleCreatePost = async () => {
-    if (!title.trim() || !content.trim()) {
-      Alert.alert("Error", "Please provide both title and content.");
-      return;
-    }
-    if (!user) {
-      Alert.alert("Error", "You must be logged in to create a post.");
-      return;
-    }
-
+  const handlePostComment = async () => {
+    if (!commentText.trim() || !user) return;
     try {
-      await apiCreatePost({
-        title,
-        content,
-        category: selectedCategory || "General",
-        authorName: user.username,
-        authorAvatar: user.avatar,
+      await apiPostComment({
+        animeId: `post-${postId}`,
+        episode: 0,
+        text: commentText,
+        username: user.username,
+        avatar: user.avatar,
       });
-      setTitle("");
-      setContent("");
-      setShowCompose(false);
-      loadPosts();
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to submit post.");
+      setCommentText('');
+      loadComments();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to post comment');
     }
   };
 
-  const handleLike = async (postId: string) => {
-    if (!user) return;
+  if (!isExpanded) return null;
+
+  return (
+    <View style={styles.commentsContainer}>
+      {loading ? (
+        <ActivityIndicator color={COLORS.primary} />
+      ) : (
+        comments.map((comment) => (
+          <View key={comment.id || Math.random().toString()} style={styles.commentItem}>
+            <Image source={{ uri: comment.avatar || 'https://via.placeholder.com/40' }} style={styles.commentAvatar} />
+            <View style={styles.commentBody}>
+              <Text style={styles.commentUsername}>{comment.username}</Text>
+              <Text style={styles.commentText}>{comment.text}</Text>
+            </View>
+          </View>
+        ))
+      )}
+      {user ? (
+        <View style={styles.commentInputRow}>
+          <Image source={{ uri: user.avatar || 'https://via.placeholder.com/40' }} style={styles.commentAvatar} />
+          <TextInput
+            style={styles.commentInput}
+            placeholder="Write a comment..."
+            placeholderTextColor={COLORS.textMuted}
+            value={commentText}
+            onChangeText={setCommentText}
+          />
+          <TouchableOpacity style={styles.commentButton} onPress={handlePostComment}>
+            <Text style={styles.commentButtonText}>Post</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.loginPrompt}>Login to comment</Text>
+      )}
+    </View>
+  );
+};
+
+export default function CommunityScreen() {
+  const { user } = useAuth();
+  const [activeCategory, setActiveCategory] = useState('All Topics');
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Compose state
+  const [isComposeExpanded, setIsComposeExpanded] = useState(false);
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostContent, setNewPostContent] = useState('');
+  const [newPostCategory, setNewPostCategory] = useState('General');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Expanded posts
+  const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
+
+  const loadPosts = async () => {
     try {
-      setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, likesCount: (p.likesCount || 0) + 1 } : p))
+      const categoryParam = activeCategory === 'All Topics' ? undefined : activeCategory;
+      const res = await apiGetPosts(categoryParam);
+      setPosts(res.data || []);
+    } catch (err) {
+      console.log('Error loading posts:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    loadPosts();
+  }, [activeCategory]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadPosts();
+  }, [activeCategory]);
+
+  const handleCreatePost = async () => {
+    if (!newPostTitle.trim() || !newPostContent.trim()) {
+      Alert.alert('Error', 'Title and content are required');
+      return;
+    }
+    if (!user) return;
+
+    setIsSubmitting(true);
+    try {
+      await apiCreatePost({
+        title: newPostTitle,
+        content: newPostContent,
+        category: newPostCategory,
+        authorName: user.username,
+        authorAvatar: user.avatar,
+      });
+      setNewPostTitle('');
+      setNewPostContent('');
+      setIsComposeExpanded(false);
+      loadPosts();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to create post');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLikePost = async (postId: string) => {
+    if (!user) {
+      Alert.alert('Error', 'Login to like posts');
+      return;
+    }
+    try {
+      // Optimistic update
+      setPosts(currentPosts => 
+        currentPosts.map(post => {
+          if (post.id === postId) {
+            const isLiked = post.likes?.includes(user.username);
+            return {
+              ...post,
+              likes: isLiked 
+                ? post.likes.filter((u: string) => u !== user.username)
+                : [...(post.likes || []), user.username],
+              upvotes: isLiked ? (post.upvotes || 1) - 1 : (post.upvotes || 0) + 1
+            };
+          }
+          return post;
+        })
       );
       await apiLikePost(postId, user.username);
-    } catch {
-      // Ignore
+    } catch (err) {
+      // Revert on error
+      loadPosts();
     }
+  };
+
+  const handleDeletePost = async (postId: string, authorName: string) => {
+    Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiDeletePost(postId, authorName, user?.role);
+            loadPosts();
+          } catch (err) {
+            Alert.alert('Error', 'Failed to delete post');
+          }
+        },
+      },
+    ]);
+  };
+
+  const toggleComments = (postId: string) => {
+    const newExpanded = new Set(expandedPosts);
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId);
+    } else {
+      newExpanded.add(postId);
+    }
+    setExpandedPosts(newExpanded);
+  };
+
+  const insertSpoiler = () => {
+    setNewPostContent(prev => prev + ' ||spoiler|| ');
+  };
+
+  const renderPost = ({ item }: { item: any }) => {
+    const isLiked = user ? item.likes?.includes(user.username) : false;
+    const canDelete = user && (user.role === 'ADMIN' || user.username === item.author?.name);
+    const isExpanded = expandedPosts.has(item.id);
+
+    return (
+      <View style={styles.postCard}>
+        {item.isPinned && (
+          <View style={styles.pinnedBadge}>
+            <Pin size={12} color={COLORS.primary} />
+            <Text style={styles.pinnedText}>Pinned</Text>
+          </View>
+        )}
+        <View style={styles.postHeader}>
+          <Image source={{ uri: item.author?.avatar || 'https://via.placeholder.com/40' }} style={styles.postAvatar} />
+          <View style={styles.postMeta}>
+            <View style={styles.authorRow}>
+              <Text style={styles.postAuthor}>{item.author?.name || 'Unknown'}</Text>
+              {item.author?.customTag && (
+                <View style={styles.tagBadge}>
+                  <Text style={styles.tagText}>{item.author.customTag}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.postDate}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Just now'}</Text>
+          </View>
+          {canDelete && (
+            <TouchableOpacity onPress={() => handleDeletePost(item.id, item.author?.name)}>
+              <Trash2 size={20} color={COLORS.danger} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <Text style={styles.postTitle}>{item.title}</Text>
+        <PostContent content={item.content || ''} />
+
+        <View style={styles.categoryBadge}>
+          <Text style={styles.categoryBadgeText}>{item.category}</Text>
+        </View>
+
+        <View style={styles.postFooter}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => handleLikePost(item.id)}>
+            <Heart size={20} color={isLiked ? COLORS.primary : COLORS.textMuted} fill={isLiked ? COLORS.primary : 'transparent'} />
+            <Text style={[styles.actionText, isLiked && { color: COLORS.primary }]}>{item.upvotes || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => toggleComments(item.id)}>
+            <MessageSquare size={20} color={COLORS.textMuted} />
+            <Text style={styles.actionText}>Comments</Text>
+          </TouchableOpacity>
+        </View>
+
+        <CommentSection postId={item.id} isExpanded={isExpanded} />
+      </View>
+    );
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Community</Text>
-          <Text style={styles.headerSub}>Discussions, reviews, and anime news</Text>
-        </View>
-
-        <TouchableOpacity style={styles.createBtn} onPress={() => setShowCompose(!showCompose)}>
-          <Plus size={18} color={COLORS.text} />
-          <Text style={styles.createBtnText}>New Post</Text>
-        </TouchableOpacity>
+        <MessageSquare size={24} color={COLORS.primary} />
+        <Text style={styles.headerTitle}>MyAniWatch Community</Text>
       </View>
 
-      {/* Category Pills */}
-      <View style={{ height: 44, marginBottom: 12 }}>
-        <FlatList
-          horizontal
-          data={CATEGORIES}
-          keyExtractor={(item) => item}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16 }}
-          renderItem={({ item }) => {
-            const isSelected = selectedCategory === item;
-            return (
-              <TouchableOpacity
-                style={[styles.categoryPill, isSelected && styles.activeCategoryPill]}
-                onPress={() => setSelectedCategory(isSelected ? null : item)}
-              >
-                <Text style={[styles.categoryText, isSelected && styles.activeCategoryText]}>{item}</Text>
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersContainer}>
+          {CATEGORIES.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.filterPill, activeCategory === cat && styles.filterPillActive]}
+              onPress={() => setActiveCategory(cat)}
+            >
+              <Text style={[styles.filterText, activeCategory === cat && styles.filterTextActive]}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {user ? (
+        user.role === 'SUSPENDED' ? (
+          <View style={styles.suspendedContainer}>
+            <Text style={styles.suspendedText}>Your account is suspended. You cannot post.</Text>
+          </View>
+        ) : (
+          <View style={styles.composeContainer}>
+            {!isComposeExpanded ? (
+              <TouchableOpacity style={styles.composePlaceholderRow} onPress={() => setIsComposeExpanded(true)}>
+                <Image source={{ uri: user.avatar || 'https://via.placeholder.com/40' }} style={styles.composeAvatar} />
+                <View style={styles.composePlaceholder}>
+                  <Text style={styles.composePlaceholderText}>Start a discussion...</Text>
+                </View>
               </TouchableOpacity>
-            );
-          }}
-        />
-      </View>
+            ) : (
+              <View style={styles.composeExpanded}>
+                <View style={styles.composeHeaderRow}>
+                  <Image source={{ uri: user.avatar || 'https://via.placeholder.com/40' }} style={styles.composeAvatar} />
+                  <Text style={styles.composeUsername}>{user.username}</Text>
+                  <TouchableOpacity onPress={() => setIsComposeExpanded(false)} style={styles.closeCompose}>
+                    <ChevronUp size={20} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                </View>
 
-      {/* Compose Box */}
-      {showCompose && (
-        <View style={styles.composeCard}>
-          <Text style={styles.composeTitle}>Create Community Post</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Post Title"
-            placeholderTextColor={COLORS.textDark}
-            value={title}
-            onChangeText={setTitle}
-          />
-          <TextInput
-            style={[styles.input, { height: 80 }]}
-            placeholder="Share your thoughts..."
-            placeholderTextColor={COLORS.textDark}
-            value={content}
-            onChangeText={setContent}
-            multiline
-          />
-          <TouchableOpacity style={styles.submitPostBtn} onPress={handleCreatePost}>
-            <Send size={16} color={COLORS.text} />
-            <Text style={styles.submitPostText}>Publish Post</Text>
-          </TouchableOpacity>
+                <TextInput
+                  style={styles.composeTitle}
+                  placeholder="Post Title..."
+                  placeholderTextColor={COLORS.textMuted}
+                  value={newPostTitle}
+                  onChangeText={setNewPostTitle}
+                />
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categorySelectScroll}>
+                  {CATEGORIES.filter(c => c !== 'All Topics').map(cat => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.catSelectPill, newPostCategory === cat && styles.catSelectPillActive]}
+                      onPress={() => setNewPostCategory(cat)}
+                    >
+                      <Text style={[styles.catSelectText, newPostCategory === cat && styles.catSelectTextActive]}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <TextInput
+                  style={styles.composeContent}
+                  placeholder="What's on your mind?..."
+                  placeholderTextColor={COLORS.textMuted}
+                  value={newPostContent}
+                  onChangeText={setNewPostContent}
+                  multiline
+                  textAlignVertical="top"
+                />
+
+                <View style={styles.composeActions}>
+                  <TouchableOpacity style={styles.spoilerButton} onPress={insertSpoiler}>
+                    <Text style={styles.spoilerButtonText}>+ Spoiler</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.submitButton, isSubmitting && { opacity: 0.7 }]} 
+                    onPress={handleCreatePost}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Post</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )
+      ) : (
+        <View style={styles.loginPromptContainer}>
+          <Text style={styles.loginPromptText}>Login to Post</Text>
         </View>
       )}
 
-      {/* Posts List */}
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
-      ) : posts.length === 0 ? (
-        <View style={styles.emptyState}>
-          <MessageCircle size={40} color={COLORS.textDark} />
-          <Text style={styles.emptyTitle}>No Posts Yet</Text>
-          <Text style={styles.emptySubtitle}>Be the first to start a conversation in this category!</Text>
-        </View>
+        <ActivityIndicator color={COLORS.primary} size="large" style={styles.loader} />
       ) : (
         <FlatList
           data={posts}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={styles.postCard}>
-              <View style={styles.postHeader}>
-                <Text style={styles.authorName}>{item.authorName}</Text>
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryBadgeText}>{item.category || "General"}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.postTitle}>{item.title}</Text>
-              <Text style={styles.postContent}>{item.content}</Text>
-
-              <View style={styles.postFooter}>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item.id)}>
-                  <ThumbsUp size={14} color={COLORS.primary} />
-                  <Text style={styles.actionText}>{item.likesCount || item.likes?.length || 0} Upvotes</Text>
-                </TouchableOpacity>
-
-                <View style={styles.actionBtn}>
-                  <MessageSquare size={14} color={COLORS.textMuted} />
-                  <Text style={styles.actionText}>{item.commentsCount || 0} Comments</Text>
-                </View>
-              </View>
-            </View>
-          )}
+          keyExtractor={(item) => item.id || Math.random().toString()}
+          renderItem={renderPost}
+          contentContainerStyle={styles.feedContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No posts found in this category.</Text>
+          }
         />
       )}
     </View>
@@ -194,174 +455,369 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     paddingTop: 48,
     paddingBottom: 16,
-    paddingHorizontal: 16,
+    backgroundColor: COLORS.surface,
   },
   headerTitle: {
     color: COLORS.text,
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 12,
   },
-  headerSub: {
+  filtersScroll: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.cardBorder,
+  },
+  filtersContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    marginRight: 8,
+  },
+  filterPillActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  filterText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterTextActive: {
+    color: COLORS.primary,
+  },
+  loginPromptContainer: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  loginPromptText: {
+    color: COLORS.textMuted,
+    fontSize: 16,
+  },
+  suspendedContainer: {
+    padding: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    alignItems: 'center',
+  },
+  suspendedText: {
+    color: COLORS.danger,
+    fontWeight: '500',
+  },
+  composeContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    overflow: 'hidden',
+  },
+  composePlaceholderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  composeAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+  },
+  composePlaceholder: {
+    flex: 1,
+    marginLeft: 12,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  composePlaceholderText: {
+    color: COLORS.textMuted,
+  },
+  composeExpanded: {
+    padding: 16,
+  },
+  composeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  composeUsername: {
+    color: COLORS.text,
+    fontWeight: '600',
+    marginLeft: 12,
+    flex: 1,
+  },
+  closeCompose: {
+    padding: 4,
+  },
+  composeTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '600',
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  categorySelectScroll: {
+    marginBottom: 12,
+  },
+  catSelectPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    marginRight: 8,
+  },
+  catSelectPillActive: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  catSelectText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+  },
+  catSelectTextActive: {
+    color: COLORS.primary,
+  },
+  composeContent: {
+    color: COLORS.text,
+    fontSize: 15,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    marginBottom: 12,
+  },
+  composeActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  spoilerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.surface,
+    borderRadius: 6,
+  },
+  spoilerButtonText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+  },
+  submitButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  submitButtonText: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  feedContainer: {
+    padding: 16,
+    gap: 16,
+  },
+  loader: {
+    marginTop: 40,
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 40,
+  },
+  postCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    padding: 16,
+  },
+  pinnedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 4,
+  },
+  pinnedText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  postAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+  },
+  postMeta: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  postAuthor: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  tagBadge: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  tagText: {
+    color: COLORS.primary,
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  postDate: {
     color: COLORS.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
-  createBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  createBtnText: {
+  postTitle: {
     color: COLORS.text,
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  categoryPill: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-  },
-  activeCategoryPill: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  categoryText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  activeCategoryText: {
-    color: COLORS.text,
-  },
-  composeCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: COLORS.surface,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-  },
-  composeTitle: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-    marginBottom: 10,
-  },
-  input: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 42,
-    color: COLORS.text,
-    marginBottom: 10,
-  },
-  submitPostBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-  },
-  submitPostText: {
-    color: COLORS.text,
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 30,
-  },
-  postCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-  },
-  postHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    fontSize: 18,
+    fontWeight: 'bold',
     marginBottom: 8,
   },
-  authorName: {
-    color: COLORS.primary,
-    fontSize: 13,
-    fontWeight: "800",
+  postContent: {
+    color: COLORS.textDark,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  spoilerHidden: {
+    backgroundColor: COLORS.surface,
+    color: COLORS.surface,
+    overflow: 'hidden',
   },
   categoryBadge: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginBottom: 16,
   },
   categoryBadgeText: {
     color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  postTitle: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 6,
-  },
-  postContent: {
-    color: COLORS.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 12,
+    fontSize: 12,
   },
   postFooter: {
-    flexDirection: "row",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 16,
     borderTopWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    paddingTop: 10,
+    borderTopColor: COLORS.cardBorder,
+    paddingTop: 16,
   },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   actionText: {
     color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: '500',
   },
-  emptyState: {
+  commentsContainer: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+    paddingTop: 16,
+    gap: 12,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  commentAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+  },
+  commentBody: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
+    backgroundColor: COLORS.surface,
+    padding: 12,
+    borderRadius: 12,
   },
-  emptyTitle: {
+  commentUsername: {
     color: COLORS.text,
-    fontSize: 18,
-    fontWeight: "800",
-    marginTop: 12,
-  },
-  emptySubtitle: {
-    color: COLORS.textMuted,
+    fontWeight: '600',
     fontSize: 13,
-    marginTop: 4,
-    textAlign: "center",
+    marginBottom: 4,
   },
+  commentText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    color: COLORS.text,
+    fontSize: 14,
+  },
+  commentButton: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  commentButtonText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  loginPrompt: {
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 8,
+  }
 });

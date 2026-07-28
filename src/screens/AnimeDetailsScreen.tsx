@@ -2,136 +2,330 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   Image,
-  TouchableOpacity,
   StyleSheet,
+  ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  FlatList,
+  Dimensions,
+  Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Play, Bookmark, Flag, Star, Tv, Clock, Calendar, Check, MoreHorizontal } from "lucide-react-native";
 import { COLORS } from "../theme/colors";
 import { apiGetAnimeDetails, apiGetEpisodes, apiToggleWatchlist } from "../services/api";
-import { Play, Bookmark, Star, Calendar, Tv, ChevronLeft } from "lucide-react-native";
+
+const { width } = Dimensions.get("window");
 
 export default function AnimeDetailsScreen({ route, navigation }: any) {
-  const { id, anime: initialAnime } = route.params || {};
-  const [details, setDetails] = useState<any>(initialAnime || null);
-  const [episodes, setEpisodes] = useState<any[]>([]);
+  const { id } = route.params;
+
   const [loading, setLoading] = useState(true);
-  const [inWatchlist, setInWatchlist] = useState(false);
+  const [details, setDetails] = useState<any>(null);
+  const [episodes, setEpisodes] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("Overview");
+  const [isWatchlisted, setIsWatchlisted] = useState(false); // Can be linked to real status if available
 
   useEffect(() => {
-    loadDetails();
+    fetchDetails();
   }, [id]);
 
-  const loadDetails = async () => {
+  const fetchDetails = async () => {
     try {
       setLoading(true);
-      const res = await apiGetAnimeDetails(id).catch(() => null);
-      if (res?.data?.media) {
-        setDetails(res.data.media);
+      const [detailsRes, episodesRes] = await Promise.all([
+        apiGetAnimeDetails(id).catch(() => null),
+        apiGetEpisodes(id).catch(() => null),
+      ]);
+
+      if (detailsRes?.data) {
+        setDetails(detailsRes.data);
       }
-      const epRes = await apiGetEpisodes(id).catch(() => ({ episodes: [] }));
-      const epList = epRes.episodes || epRes.data || [];
-      setEpisodes(epList);
-    } catch {
-      // Ignore
+      if (episodesRes?.data?.episodes) {
+        setEpisodes(episodesRes.data.episodes);
+      }
+    } catch (error) {
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleWatchlist = async () => {
+  const handleWatchlist = async () => {
     try {
-      const title = details?.title?.english || details?.title?.romaji || "Anime";
-      const thumb = details?.coverImage?.large || details?.coverImage?.medium || "";
-      await apiToggleWatchlist(String(id), title, thumb, inWatchlist ? "remove" : "watching");
-      setInWatchlist(!inWatchlist);
-      Alert.alert("Success", inWatchlist ? "Removed from Watchlist" : "Added to Watchlist!");
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to update watchlist");
+      if (!details?.anime?.info) return;
+      const { name, poster } = details.anime.info;
+      await apiToggleWatchlist(id, name, poster, isWatchlisted ? "removed" : "watching");
+      setIsWatchlisted(!isWatchlisted);
+    } catch (err) {
+      console.error("Watchlist error", err);
     }
   };
 
-  const animeTitle = details?.title?.english || details?.title?.romaji || "Anime Details";
-  const coverUrl = details?.coverImage?.large || details?.coverImage?.medium || details?.poster || "";
-  const totalEps = episodes.length || details?.episodes || 12;
+  const renderTabs = () => (
+    <View style={styles.tabsContainer}>
+      {["Overview", "Episodes", "Relations"].map((tab) => (
+        <TouchableOpacity
+          key={tab}
+          style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+          onPress={() => setActiveTab(tab)}
+        >
+          <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+            {tab}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
-  return (
-    <View style={styles.container}>
-      {/* Back Button */}
-      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-        <ChevronLeft size={24} color={COLORS.text} />
-      </TouchableOpacity>
+  const renderOverview = () => {
+    if (!details?.anime) return null;
+    const { info, moreInfo } = details.anime;
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Banner / Poster Header */}
-        <View style={styles.bannerContainer}>
-          <Image source={{ uri: coverUrl }} style={styles.bannerImage} blurRadius={10} />
-          <View style={styles.bannerOverlay} />
+    return (
+      <View style={styles.overviewContainer}>
+        {/* Left Details Card */}
+        <View style={styles.detailsCard}>
+          <Text style={styles.detailLabel}>Japanese:</Text>
+          <Text style={styles.detailValue}>{moreInfo?.japanese || "N/A"}</Text>
 
-          <View style={styles.headerContent}>
-            <Image source={{ uri: coverUrl }} style={styles.posterImage} />
-            <View style={styles.headerInfo}>
-              <Text style={styles.title} numberOfLines={2}>{animeTitle}</Text>
+          <Text style={styles.detailLabel}>Aired:</Text>
+          <Text style={styles.detailValue}>{moreInfo?.aired || "N/A"}</Text>
 
-              <View style={styles.metaRow}>
-                <View style={styles.metaBadge}>
-                  <Star size={12} color="#F59E0B" fill="#F59E0B" />
-                  <Text style={styles.metaBadgeText}>{details?.averageScore ? `${(details.averageScore / 10).toFixed(1)}` : "8.5"}</Text>
-                </View>
+          <Text style={styles.detailLabel}>Duration:</Text>
+          <Text style={styles.detailValue}>{moreInfo?.duration || "N/A"}</Text>
 
-                <View style={styles.metaBadge}>
-                  <Tv size={12} color={COLORS.secondary} />
-                  <Text style={styles.metaBadgeText}>{totalEps} Episodes</Text>
-                </View>
+          <Text style={styles.detailLabel}>Studio:</Text>
+          <Text style={styles.detailValue}>{moreInfo?.studios || "N/A"}</Text>
+
+          <Text style={styles.detailLabel}>Genres:</Text>
+          <View style={styles.genresContainer}>
+            {moreInfo?.genres?.map((g: string, i: number) => (
+              <View key={i} style={styles.genreBadge}>
+                <Text style={styles.genreText}>{g}</Text>
               </View>
-
-              {/* Watchlist Toggle */}
-              <TouchableOpacity
-                style={[styles.watchlistBtn, inWatchlist && styles.inWatchlistBtn]}
-                onPress={handleToggleWatchlist}
-              >
-                <Bookmark size={14} color={inWatchlist ? COLORS.primary : COLORS.text} fill={inWatchlist ? COLORS.primary : "transparent"} />
-                <Text style={styles.watchlistBtnText}>{inWatchlist ? "Saved in Watchlist" : "+ Watchlist"}</Text>
-              </TouchableOpacity>
-            </View>
+            ))}
           </View>
         </View>
 
-        {/* Synopsis */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Overview</Text>
-          <Text style={styles.description}>
-            {details?.description ? details.description.replace(/<[^>]*>?/gm, "") : "Enjoy streaming this anime series with high-quality playback and synchronized audio subtitles."}
+        {/* Right Synopsis */}
+        <View style={styles.synopsisContainer}>
+          <Text style={styles.synopsisTitle}>Synopsis</Text>
+          <Text style={styles.synopsisText}>
+            {info?.description?.replace(/<[^>]*>?/gm, "") || "No synopsis available."}
           </Text>
         </View>
+      </View>
+    );
+  };
 
-        {/* Episodes Grid */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Episodes ({totalEps})</Text>
-          {loading ? (
-            <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />
-          ) : (
-            <View style={styles.episodesGrid}>
-              {Array.from({ length: totalEps }).map((_, idx) => {
-                const epNum = idx + 1;
-                return (
-                  <TouchableOpacity
-                    key={epNum}
-                    style={styles.epButton}
-                    onPress={() => navigation.navigate("Watch", { animeId: id, episodeNumber: epNum, animeTitle })}
-                  >
-                    <Play size={12} color={COLORS.primary} fill={COLORS.primary} />
-                    <Text style={styles.epText}>Ep {epNum}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
+  const renderEpisodes = () => {
+    if (!episodes || episodes.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No episodes available.</Text>
         </View>
-      </ScrollView>
-    </View>
+      );
+    }
+
+    return (
+      <View style={styles.episodesContainer}>
+        {episodes.map((ep) => (
+          <TouchableOpacity
+            key={ep.episodeId || ep.number}
+            style={styles.episodeButton}
+            onPress={() =>
+              navigation.navigate("Watch", {
+                animeId: id,
+                episode: ep.number,
+                title: details?.anime?.info?.name,
+                poster: details?.anime?.info?.poster,
+                malId: details?.anime?.info?.malId,
+              })
+            }
+          >
+            <Text style={styles.episodeNumber}>{ep.number}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  const renderRelations = () => {
+    const seasons = details?.seasons;
+    if (!seasons || seasons.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No related seasons found.</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.relationsContainer}>
+        {seasons.map((season: any, idx: number) => (
+          <TouchableOpacity
+            key={idx}
+            style={styles.relationCard}
+            onPress={() => {
+              if (season.id && season.id !== id) {
+                navigation.push("AnimeDetails", { id: season.id });
+              }
+            }}
+          >
+            <Image
+              source={{ uri: season.poster || details?.anime?.info?.poster }}
+              style={styles.relationPoster}
+              resizeMode="cover"
+            />
+            <View style={styles.relationInfo}>
+              <Text style={styles.relationTitle} numberOfLines={2}>
+                {season.name || season.title}
+              </Text>
+              <Text style={styles.relationType}>{season.title?.length > 0 ? "Season" : ""}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (!details?.anime?.info) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={{ color: COLORS.text }}>Failed to load anime details.</Text>
+      </View>
+    );
+  }
+
+  const { info, moreInfo } = details.anime;
+  const recommended = details.recommendedAnimes || [];
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+      {/* Hero Banner */}
+      <View style={styles.heroContainer}>
+        <Image source={{ uri: info.poster }} style={styles.heroBanner} blurRadius={10} resizeMode="cover" />
+        <LinearGradient
+          colors={["transparent", "rgba(9, 10, 15, 0.8)", COLORS.background]}
+          style={styles.heroGradient}
+        />
+      </View>
+
+      {/* Poster + Info */}
+      <View style={styles.headerInfoContainer}>
+        <View style={styles.posterWrapper}>
+          <Image source={{ uri: info.poster }} style={styles.poster} resizeMode="cover" />
+        </View>
+
+        <View style={styles.infoRight}>
+          <Text style={styles.title} numberOfLines={3}>
+            {info.name}
+          </Text>
+
+          <View style={styles.badgesContainer}>
+            <View style={[styles.badge, { backgroundColor: COLORS.primaryLight }]}>
+              <Star size={12} color={COLORS.primary} />
+              <Text style={styles.badgeText}>{info.stats?.rating || "N/A"}</Text>
+            </View>
+            <View style={[styles.badge, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
+              <Tv size={12} color={COLORS.text} />
+              <Text style={styles.badgeText}>{info.stats?.type || "TV"}</Text>
+            </View>
+            <View style={[styles.badge, { backgroundColor: "rgba(16, 185, 129, 0.15)" }]}>
+              <Text style={[styles.badgeText, { color: COLORS.success, marginLeft: 0 }]}>
+                {moreInfo?.status || "Unknown"}
+              </Text>
+            </View>
+            <View style={[styles.badge, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
+              <Text style={[styles.badgeText, { marginLeft: 0 }]}>
+                EP {info.stats?.episodes?.sub || info.stats?.episodes?.dub || "?"}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity
+          style={styles.watchButton}
+          onPress={() => {
+            if (episodes.length > 0) {
+              navigation.navigate("Watch", {
+                animeId: id,
+                episode: episodes[0].number,
+                title: info.name,
+                poster: info.poster,
+                malId: info.malId,
+              });
+            }
+          }}
+        >
+          <LinearGradient
+            colors={[COLORS.primary, COLORS.primaryHover]}
+            style={styles.watchButtonGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Play size={20} color="#FFF" fill="#FFF" />
+            <Text style={styles.watchButtonText}>Watch Now</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.iconButton} onPress={handleWatchlist}>
+          <Bookmark size={20} color={isWatchlisted ? COLORS.primary : COLORS.text} fill={isWatchlisted ? COLORS.primary : "transparent"} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.iconButton}>
+          <Flag size={20} color={COLORS.text} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Tabs */}
+      {renderTabs()}
+
+      {/* Tab Content */}
+      <View style={styles.tabContentContainer}>
+        {activeTab === "Overview" && renderOverview()}
+        {activeTab === "Episodes" && renderEpisodes()}
+        {activeTab === "Relations" && renderRelations()}
+      </View>
+
+      {/* Recommended Section */}
+      {recommended.length > 0 && (
+        <View style={styles.recommendedContainer}>
+          <Text style={styles.sectionTitle}>Recommended for you</Text>
+          <FlatList
+            horizontal
+            data={recommended}
+            keyExtractor={(item, index) => item.id || index.toString()}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recommendedList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.recommendedCard}
+                onPress={() => navigation.push("AnimeDetails", { id: item.id })}
+              >
+                <Image source={{ uri: item.poster }} style={styles.recommendedPoster} resizeMode="cover" />
+                <Text style={styles.recommendedTitle} numberOfLines={2}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -140,127 +334,284 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  backBtn: {
-    position: "absolute",
-    top: 48,
-    left: 16,
-    zIndex: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scrollContent: {
+  contentContainer: {
     paddingBottom: 40,
   },
-  bannerContainer: {
-    height: 280,
-    width: "100%",
-    justifyContent: "flex-end",
-  },
-  bannerImage: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  bannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(9, 10, 15, 0.8)",
-  },
-  headerContent: {
-    flexDirection: "row",
-    padding: 16,
-    gap: 16,
-    alignItems: "flex-end",
-  },
-  posterImage: {
-    width: 100,
-    height: 140,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-  },
-  headerInfo: {
+  loadingContainer: {
     flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroContainer: {
+    width: "100%",
+    height: 250,
+    position: "relative",
+  },
+  heroBanner: {
+    width: "100%",
+    height: "100%",
+    opacity: 0.5,
+  },
+  heroGradient: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 150,
+  },
+  headerInfoContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    marginTop: -80,
+    zIndex: 10,
+  },
+  posterWrapper: {
+    width: 120,
+    height: 180,
+    borderRadius: 12,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 10,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: "rgba(139, 92, 246, 0.5)",
+  },
+  poster: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 11,
+  },
+  infoRight: {
+    flex: 1,
+    marginLeft: 16,
+    justifyContent: "flex-end",
+    paddingBottom: 10,
   },
   title: {
     color: COLORS.text,
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
-  metaRow: {
-    flexDirection: "row",
-    gap: 8,
+    fontSize: 22,
+    fontWeight: "bold",
     marginBottom: 12,
   },
-  metaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  metaBadgeText: {
-    color: COLORS.text,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  watchlistBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    alignSelf: "flex-start",
-  },
-  inWatchlistBtn: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLight,
-  },
-  watchlistBtnText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: "900",
-    marginBottom: 10,
-  },
-  description: {
-    color: COLORS.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  episodesGrid: {
+  badgesContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
-  epButton: {
+  badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  badgeText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  actionsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    marginTop: 20,
+    alignItems: "center",
+    gap: 12,
+  },
+  watchButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    overflow: "hidden",
+  },
+  watchButtonGradient: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  watchButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  iconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tabsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    marginTop: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.cardBorder,
+  },
+  tabButton: {
+    paddingVertical: 12,
+    marginRight: 24,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabButtonActive: {
+    borderBottomColor: COLORS.primary,
+  },
+  tabText: {
+    color: COLORS.textMuted,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  tabTextActive: {
+    color: COLORS.primary,
+  },
+  tabContentContainer: {
+    padding: 16,
+  },
+  overviewContainer: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  detailsCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
-  epText: {
+  detailLabel: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginBottom: 2,
+    marginTop: 8,
+  },
+  detailValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  genresContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  genreBadge: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  genreText: {
+    color: COLORS.text,
+    fontSize: 11,
+  },
+  synopsisContainer: {
+    flex: 1.5,
+  },
+  synopsisTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  synopsisText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  episodesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  episodeButton: {
+    width: (width - 32 - 30) / 4,
+    height: 40,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  episodeNumber: {
+    color: COLORS.text,
+    fontWeight: "bold",
+  },
+  emptyContainer: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+  },
+  relationsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  relationCard: {
+    width: (width - 32 - 12) / 2,
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  relationPoster: {
+    width: "100%",
+    height: 100,
+  },
+  relationInfo: {
+    padding: 8,
+  },
+  relationTitle: {
     color: COLORS.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  relationType: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "bold",
+    marginLeft: 16,
+    marginBottom: 12,
+  },
+  recommendedContainer: {
+    marginTop: 16,
+  },
+  recommendedList: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  recommendedCard: {
+    width: 120,
+  },
+  recommendedPoster: {
+    width: 120,
+    height: 180,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  recommendedTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

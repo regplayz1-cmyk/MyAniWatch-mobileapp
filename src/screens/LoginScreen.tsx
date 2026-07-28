@@ -4,176 +4,241 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
+  ActivityIndicator,
   Alert,
+  Dimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { COLORS } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
-import { LogIn, UserPlus, Lock, Mail, User as UserIcon } from "lucide-react-native";
+import { LogIn, UserPlus, Mail, Lock, User, Eye, EyeOff, Sparkles } from "lucide-react-native";
+
+const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
   const { login, signup } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async () => {
-    const cleanUsername = username.trim();
-    const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
+    setError("");
+    if (isLogin) {
+      if (!username.trim() || !password.trim()) {
+        setError("Please fill in all fields");
+        return;
+      }
+    } else {
+      if (!username.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+        setError("Please fill in all fields");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match");
+        return;
+      }
+    }
 
-    if (!cleanUsername || !cleanPassword) {
-      Alert.alert("Error", "Please fill in all required fields.");
-      return;
-    }
-    if (isSignUp && !cleanEmail) {
-      Alert.alert("Error", "Please enter a valid email address.");
-      return;
-    }
-    if (isSignUp && cleanPassword !== passwordConfirm.trim()) {
-      Alert.alert("Error", "Passwords do not match.");
-      return;
-    }
-
+    setLoading(true);
     try {
-      setLoading(true);
-      if (isSignUp) {
-        await signup(cleanUsername, cleanEmail, cleanPassword, passwordConfirm.trim());
+      if (isLogin) {
+        await login(username.trim(), password);
       } else {
-        await login(cleanUsername, cleanPassword);
+        await signup(username.trim(), email.trim(), password, confirmPassword);
       }
     } catch (err: any) {
-      Alert.alert("Authentication Failed", err.message || "Something went wrong.");
+      setError(err.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Header Branding */}
-        <View style={styles.header}>
-          <Text style={styles.logoTitle}>MyAniWatch</Text>
-          <Text style={styles.subtitle}>
-            {isSignUp ? "Create an account to start watching" : "Sign in to access your account"}
-          </Text>
-        </View>
+    <View style={styles.container}>
+      {/* Background gradient */}
+      <LinearGradient
+        colors={["#1a0e2e", COLORS.background, "#0f0a1e"]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
 
-        {/* Auth Card */}
-        <View style={styles.card}>
-          {/* Tab Switcher */}
-          <View style={styles.tabContainer}>
-            <TouchableOpacity
-              style={[styles.tab, !isSignUp && styles.activeTab]}
-              onPress={() => setIsSignUp(false)}
-            >
-              <LogIn size={16} color={!isSignUp ? COLORS.text : COLORS.textMuted} />
-              <Text style={[styles.tabText, !isSignUp && styles.activeTabText]}>Sign In</Text>
-            </TouchableOpacity>
+      {/* Purple glow */}
+      <View style={styles.glowOrb} />
 
-            <TouchableOpacity
-              style={[styles.tab, isSignUp && styles.activeTab]}
-              onPress={() => setIsSignUp(true)}
-            >
-              <UserPlus size={16} color={isSignUp ? COLORS.text : COLORS.textMuted} />
-              <Text style={[styles.tabText, isSignUp && styles.activeTabText]}>Register</Text>
-            </TouchableOpacity>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo & Branding */}
+          <View style={styles.brandSection}>
+            <View style={styles.logoContainer}>
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.accent]}
+                style={styles.logoGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Sparkles size={28} color="#fff" />
+              </LinearGradient>
+            </View>
+            <Text style={styles.brandTitle}>MyAniWatch</Text>
+            <Text style={styles.brandSubtitle}>
+              {isLogin ? "Welcome back, Otaku" : "Join the community"}
+            </Text>
           </View>
 
-          {/* Form Inputs */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Username</Text>
+          {/* Form Card */}
+          <View style={styles.formCard}>
+            {/* Tab Switcher */}
+            <View style={styles.tabRow}>
+              <TouchableOpacity
+                style={[styles.tab, isLogin && styles.tabActive]}
+                onPress={() => { setIsLogin(true); setError(""); }}
+              >
+                <LogIn size={16} color={isLogin ? "#fff" : COLORS.textDark} />
+                <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, !isLogin && styles.tabActive]}
+                onPress={() => { setIsLogin(false); setError(""); }}
+              >
+                <UserPlus size={16} color={!isLogin ? "#fff" : COLORS.textDark} />
+                <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Error */}
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* Username Input */}
             <View style={styles.inputWrapper}>
-              <UserIcon size={18} color={COLORS.textMuted} style={styles.inputIcon} />
+              <User size={18} color={COLORS.textDark} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter username"
+                placeholder="Username or Email"
                 placeholderTextColor={COLORS.textDark}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
-          </View>
 
-          {isSignUp && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
+            {/* Email (signup only) */}
+            {!isLogin && (
               <View style={styles.inputWrapper}>
-                <Mail size={18} color={COLORS.textMuted} style={styles.inputIcon} />
+                <Mail size={18} color={COLORS.textDark} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter email address"
+                  placeholder="Email Address"
                   placeholderTextColor={COLORS.textDark}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
-            </View>
-          )}
+            )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
+            {/* Password Input */}
             <View style={styles.inputWrapper}>
-              <Lock size={18} color={COLORS.textMuted} style={styles.inputIcon} />
+              <Lock size={18} color={COLORS.textDark} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
-                placeholder="Enter password"
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Password"
                 placeholderTextColor={COLORS.textDark}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
               />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                {showPassword ? (
+                  <EyeOff size={18} color={COLORS.textDark} />
+                ) : (
+                  <Eye size={18} color={COLORS.textDark} />
+                )}
+              </TouchableOpacity>
             </View>
-          </View>
 
-          {isSignUp && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
+            {/* Confirm Password (signup only) */}
+            {!isLogin && (
               <View style={styles.inputWrapper}>
-                <Lock size={18} color={COLORS.textMuted} style={styles.inputIcon} />
+                <Lock size={18} color={COLORS.textDark} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Confirm password"
+                  placeholder="Confirm Password"
                   placeholderTextColor={COLORS.textDark}
-                  value={passwordConfirm}
-                  onChangeText={setPasswordConfirm}
-                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
                 />
               </View>
-            </View>
-          )}
-
-          {/* Submit Button */}
-          <TouchableOpacity
-            style={styles.submitBtn}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={COLORS.text} />
-            ) : (
-              <Text style={styles.submitBtnText}>
-                {isSignUp ? "Create Account" : "Sign In"}
-              </Text>
             )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleSubmit}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primaryHover]}
+                style={styles.submitGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    {isLogin ? <LogIn size={18} color="#fff" /> : <UserPlus size={18} color="#fff" />}
+                    <Text style={styles.submitText}>
+                      {isLogin ? "Sign In" : "Create Account"}
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Switch mode */}
+            <TouchableOpacity
+              onPress={() => { setIsLogin(!isLogin); setError(""); }}
+              style={styles.switchButton}
+            >
+              <Text style={styles.switchText}>
+                {isLogin ? "Don't have an account? " : "Already have an account? "}
+                <Text style={styles.switchHighlight}>
+                  {isLogin ? "Sign Up" : "Login"}
+                </Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -182,40 +247,68 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  glowOrb: {
+    position: "absolute",
+    top: -100,
+    right: -80,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "rgba(139, 92, 246, 0.15)",
+    // Using a simple opacity approach since expo-blur may not be available
+  },
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 60,
   },
-  header: {
+  brandSection: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 36,
   },
-  logoTitle: {
+  logoContainer: {
+    marginBottom: 16,
+  },
+  logoGradient: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  brandTitle: {
     fontSize: 32,
     fontWeight: "900",
-    color: COLORS.primary,
-    letterSpacing: -0.5,
+    color: COLORS.text,
+    fontStyle: "italic",
+    letterSpacing: -1,
   },
-  subtitle: {
+  brandSubtitle: {
     fontSize: 14,
     color: COLORS.textMuted,
-    marginTop: 8,
-    textAlign: "center",
+    marginTop: 4,
+    fontWeight: "500",
   },
-  card: {
-    backgroundColor: COLORS.surface,
+  formCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderRadius: 24,
-    padding: 24,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+    padding: 24,
+    gap: 16,
   },
-  tabContainer: {
+  tabRow: {
     flexDirection: "row",
-    backgroundColor: COLORS.background,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderRadius: 16,
     padding: 4,
-    marginBottom: 24,
+    marginBottom: 4,
   },
   tab: {
     flex: 1,
@@ -226,34 +319,37 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
   },
-  activeTab: {
+  tabActive: {
     backgroundColor: COLORS.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    color: COLORS.textMuted,
+    color: COLORS.textDark,
   },
-  activeTabText: {
-    color: COLORS.text,
+  tabTextActive: {
+    color: "#fff",
   },
-  inputGroup: {
-    marginBottom: 16,
+  errorBox: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: 12,
+    padding: 12,
   },
-  label: {
+  errorText: {
+    color: COLORS.danger,
     fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.textMuted,
-    marginBottom: 8,
-    textTransform: "uppercase",
+    fontWeight: "600",
+    textAlign: "center",
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+    borderRadius: 14,
     paddingHorizontal: 14,
   },
   inputIcon: {
@@ -261,21 +357,50 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 48,
+    paddingVertical: 14,
+    fontSize: 14,
     color: COLORS.text,
-    fontSize: 15,
+    fontWeight: "500",
   },
-  submitBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    height: 52,
+  eyeButton: {
+    padding: 6,
+  },
+  submitButton: {
+    marginTop: 4,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  submitGradient: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 16,
   },
-  submitBtnText: {
-    color: COLORS.text,
-    fontSize: 16,
+  submitText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  switchButton: {
+    alignItems: "center",
+    paddingTop: 4,
+  },
+  switchText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: "500",
+  },
+  switchHighlight: {
+    color: COLORS.primary,
     fontWeight: "800",
   },
 });

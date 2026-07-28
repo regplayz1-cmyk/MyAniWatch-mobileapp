@@ -81,6 +81,11 @@ export async function apiTogglePrivacy(userId: string) {
   });
 }
 
+// ── Home Page ──
+export async function apiGetHomePage() {
+  return request("/api/home");
+}
+
 // ── Anime & Search Services ──
 export async function apiGetTrending() {
   return request("/api/anime/trending");
@@ -90,10 +95,11 @@ export async function apiGetPopular() {
   return request("/api/anime/search?sort=POPULARITY_DESC");
 }
 
-export async function apiSearchAnime(query: string, page: number = 1, genre?: string) {
+export async function apiSearchAnime(query: string, page: number = 1, genre?: string, sort?: string) {
   let url = `/api/anime/search?page=${page}`;
   if (query) url += `&query=${encodeURIComponent(query)}`;
   if (genre) url += `&genre=${encodeURIComponent(genre)}`;
+  if (sort) url += `&sort=${encodeURIComponent(sort)}`;
   return request(url);
 }
 
@@ -102,7 +108,31 @@ export async function apiGetAnimeDetails(id: string) {
 }
 
 export async function apiGetEpisodes(animeId: string) {
-  return request(`/api/v2/hianime/anime/${animeId}/episodes`).catch(() => ({ episodes: [] }));
+  return request(`/api/anime/${animeId}/episodes`);
+}
+
+// ── Comments Services ──
+export async function apiGetComments(animeId: string, episode: number) {
+  return request(`/api/comments?animeId=${encodeURIComponent(animeId)}&episode=${episode}`);
+}
+
+export async function apiPostComment(data: { animeId: string; episode: number; text: string; username: string; avatar?: string; parentId?: string }) {
+  return request("/api/comments", { method: "POST", body: JSON.stringify(data) });
+}
+
+// ── Watch Stats ──
+export async function apiGetWatchStats(userId: string) {
+  return request(`/api/stats/watchtime?userId=${encodeURIComponent(userId)}`);
+}
+
+// ── Profile ──
+export async function apiGetProfile(userId: string) {
+  return request(`/api/profile/${encodeURIComponent(userId)}`);
+}
+
+// ── Delete Post ──
+export async function apiDeletePost(postId: string, authorName: string, authorRole?: string) {
+  return request(`/api/community/posts?id=${postId}&authorName=${encodeURIComponent(authorName)}&authorRole=${authorRole || ""}`, { method: "DELETE" });
 }
 
 // ── Multi-Provider Stream Sources (Anikai, Anizone, AniBD, 2Dhive, Senshi, Miruro, HiAnime) ──
