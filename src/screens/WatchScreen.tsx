@@ -175,291 +175,294 @@ export default function WatchScreen({ route, navigation }: any) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
-          :root {
-            --primary: #8b5cf6;
-            --primary-glow: rgba(139, 92, 246, 0.5);
-            --accent: #00e5ff;
-            --bg: #090a0f;
-          }
-          * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-          body, html { width: 100%; height: 100%; background: var(--bg); overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Inter", Roboto, sans-serif; }
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
           
-          #player-container {
-            position: relative;
+          .tsp-wrap {
+            --accent:       #e8a838;
+            --accent-2:     #f5c84a;
+            --accent-dim:   rgba(232, 168, 56, 0.15);
+            --accent-glow:  rgba(232, 168, 56, 0.5);
+            --accent-ring:  rgba(232, 168, 56, 0.35);
+
+            --white:        #ffffff;
+            --white-90:     rgba(255,255,255,0.90);
+            --white-70:     rgba(255,255,255,0.70);
+            --white-45:     rgba(255,255,255,0.45);
+            --white-20:     rgba(255,255,255,0.20);
+            --white-10:     rgba(255,255,255,0.10);
+            --white-06:     rgba(255,255,255,0.06);
+
+            --glass-bg:     rgba(8, 8, 12, 0.82);
+            --glass-bg-2:   rgba(14, 14, 20, 0.92);
+            --glass-border: rgba(255,255,255,0.09);
+            --glass-border-h: rgba(255,255,255,0.20);
+
+            --font-ui:   'Inter', system-ui, sans-serif;
+            --font-mono: 'DM Mono', monospace;
+
+            --radius-sm: 6px;
+            --radius:    10px;
+            --radius-lg: 14px;
+
+            --ctrl-h:    72px;
+            --seek-h:    4px;
+            --seek-h-hv: 7px;
+            --thumb-sz:  15px;
+
+            --transition: 0.18s cubic-bezier(0.16,1,0.3,1);
+          }
+
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body, html { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: var(--font-ui); }
+
+          .tsp-wrap {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             overflow: hidden;
+            color: var(--white);
+            user-select: none;
+            -webkit-user-select: none;
           }
-          
-          video {
+
+          .tsp-video {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             object-fit: contain;
+            display: block;
+            z-index: 1;
           }
-          
-          /* Top HUD */
-          .hud-top {
+
+          .tsp-hud {
             position: absolute;
             top: 0; left: 0; right: 0;
-            padding: 14px 18px;
+            padding: 14px 18px 48px;
             background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
-            z-index: 10;
-            transition: opacity 0.3s ease;
+            opacity: 0;
+            transition: opacity var(--transition);
+            pointer-events: none;
+            z-index: 30;
           }
-          
-          .hud-title {
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 70%;
-          }
-          
-          .hud-badge {
-            background: linear-gradient(135deg, var(--primary), #7c3aed);
-            color: #fff;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            box-shadow: 0 0 12px var(--primary-glow);
-          }
-          
-          /* Center Play Overlay */
-          .center-overlay {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 8;
-            background: rgba(0,0,0,0.3);
-            transition: opacity 0.3s ease;
-          }
-          
-          .play-btn-large {
-            width: 58px;
-            height: 58px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--primary), #7c3aed);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 22px;
-            cursor: pointer;
-            box-shadow: 0 0 30px var(--primary-glow);
-            transition: transform 0.2s ease;
-          }
-          .play-btn-large:active { transform: scale(0.9); }
+          .tsp-wrap.ui .tsp-hud { opacity: 1; }
 
-          /* Bottom Control Bar */
-          .hud-bottom {
+          .tsp-hud-left { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+          .tsp-hud-name {
+            font-size: 13px; font-weight: 700; color: var(--white);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw;
+          }
+          .tsp-hud-ep {
+            font-size: 11px; font-weight: 600; color: var(--accent); letter-spacing: 0.04em;
+          }
+
+          .tsp-center-play {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.45);
+            border: 1.5px solid rgba(255,255,255,0.25);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 22;
+            transition: background var(--transition), transform var(--transition);
+          }
+          .tsp-center-play svg { width: 28px; height: 28px; fill: var(--white); margin-left: 3px; }
+          .tsp-wrap.playing .tsp-center-play { opacity: 0; pointer-events: none; }
+
+          .tsp-toast {
+            position: absolute; top: 16px; left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            padding: 6px 16px; background: var(--glass-bg-2);
+            border: 1px solid var(--glass-border-h); border-radius: 99px;
+            font-size: 12px; font-family: var(--font-mono); color: var(--white-90);
+            pointer-events: none; opacity: 0; z-index: 80; white-space: nowrap;
+            transition: opacity 0.2s, transform 0.2s;
+          }
+          .tsp-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+          .tsp-ctrl {
             position: absolute;
             bottom: 0; left: 0; right: 0;
-            padding: 12px 16px 14px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            transition: opacity 0.3s ease;
+            height: var(--ctrl-h);
+            padding: 0 14px 12px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, transparent 100%);
+            display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+            opacity: 0; transition: opacity var(--transition);
+            pointer-events: none; z-index: 30;
           }
+          .tsp-wrap.ui .tsp-ctrl { opacity: 1; pointer-events: all; }
 
-          /* Seek Bar */
-          .seek-row {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-          }
-          .seek-bar-container {
-            position: relative;
-            flex: 1;
-            height: 6px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 3px;
-            cursor: pointer;
-          }
-          .seek-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
-            border-radius: 3px;
-            width: 0%;
-          }
-          .time-text {
-            color: rgba(255,255,255,0.8);
-            font-size: 11px;
-            font-weight: 600;
-            font-family: monospace;
-            min-width: 80px;
-            text-align: right;
-          }
+          .tsp-seek-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+          .tsp-tt { font-size: 11px; font-family: var(--font-mono); color: var(--white-70); min-width: 36px; text-align: center; }
 
-          /* Controls Row */
-          .controls-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          .controls-left, .controls-right {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-          }
-          .ctrl-icon {
-            color: #fff;
-            font-size: 16px;
-            cursor: pointer;
-            opacity: 0.85;
-            transition: opacity 0.2s;
-          }
-          .ctrl-icon:active { opacity: 1; transform: scale(1.1); }
+          .tsp-seek { flex: 1; height: 24px; display: flex; align-items: center; cursor: pointer; position: relative; }
+          .tsp-seek-track { width: 100%; height: var(--seek-h); background: rgba(255,255,255,0.18); border-radius: 99px; position: relative; }
+          .tsp-seek-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 0%; }
+          .tsp-seek-thumb { position: absolute; top: 50%; width: var(--thumb-sz); height: var(--thumb-sz); background: var(--white); border-radius: 50%; transform: translate(-50%,-50%); }
 
-          /* Hidden UI state */
-          .ui-hidden .hud-top, .ui-hidden .hud-bottom, .ui-hidden .center-overlay {
-            opacity: 0;
-            pointer-events: none;
+          .tsp-btn-row { display: flex; align-items: center; gap: 6px; width: 100%; }
+          .tsp-cb {
+            background: none; border: none; color: var(--white-70); cursor: pointer;
+            width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border-radius: var(--radius-sm); outline: none;
+          }
+          .tsp-cb svg { width: 18px; height: 18px; fill: currentColor; }
+          .tsp-sp-btn { flex: 1; }
+
+          .tsp-q-lbl {
+            padding: 4px 9px; border: 1px solid rgba(255,255,255,0.18); border-radius: var(--radius-sm);
+            background: rgba(255,255,255,0.08); color: var(--white-70); font-family: var(--font-mono); font-size: 10px; font-weight: 600;
           }
         </style>
       </head>
       <body>
-        <div id="player-container" class="ui-visible">
-          <video id="video" playsinline crossorigin="anonymous" autoplay></video>
+        <div class="tsp-wrap ui" id="tsp-wrap">
+          <video class="tsp-video" id="video" playsinline crossorigin="anonymous" autoplay></video>
 
-          <!-- Top HUD -->
-          <div class="hud-top">
-            <div class="hud-title">${title || "MyAniWatch"} • Episode ${currentEp}</div>
-            <div class="hud-badge">HD 1080p</div>
-          </div>
-
-          <!-- Center Play Overlay -->
-          <div class="center-overlay" id="center-play">
-            <div class="play-btn-large" id="big-play-icon">
-              <i class="fas fa-play" style="margin-left: 3px;"></i>
+          <div class="tsp-hud">
+            <div class="tsp-hud-left">
+              <div class="tsp-hud-name">${title || "Anime"}</div>
+              <div class="tsp-hud-ep">EPISODE ${currentEp}</div>
             </div>
           </div>
 
-          <!-- Bottom Controls -->
-          <div class="hud-bottom">
-            <div class="seek-row">
-              <div class="seek-bar-container" id="seek-container">
-                <div class="seek-fill" id="seek-fill"></div>
+          <div class="tsp-center-play" id="tsp-center-play">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+
+          <div class="tsp-toast" id="tsp-toast"></div>
+
+          <div class="tsp-ctrl">
+            <div class="tsp-seek-row">
+              <span class="tsp-tt" id="tsp-cur">0:00</span>
+              <div class="tsp-seek" id="tsp-seek">
+                <div class="tsp-seek-track">
+                  <div class="tsp-seek-fill" id="tsp-fill"></div>
+                  <div class="tsp-seek-thumb" id="tsp-thumb"></div>
+                </div>
               </div>
-              <div class="time-text" id="time-text">00:00 / 00:00</div>
+              <span class="tsp-tt" id="tsp-dur">0:00</span>
             </div>
-            <div class="controls-row">
-              <div class="controls-left">
-                <i class="fas fa-play ctrl-icon" id="btn-play"></i>
-                <i class="fas fa-undo ctrl-icon" id="btn-rewind"></i>
-                <i class="fas fa-redo ctrl-icon" id="btn-forward"></i>
-              </div>
-              <div class="controls-right">
-                <i class="fas fa-expand ctrl-icon" id="btn-fullscreen"></i>
-              </div>
+
+            <div class="tsp-btn-row">
+              <button class="tsp-cb" id="tsp-play">
+                <svg viewBox="0 0 24 24" id="tsp-play-ic"><path d="M8 5v14l11-7z"/></svg>
+              </button>
+              <button class="tsp-cb" id="tsp-rew">
+                <svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+              </button>
+              <button class="tsp-cb" id="tsp-fwd">
+                <svg viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05.99 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
+              </button>
+
+              <div class="tsp-sp-btn"></div>
+              <div class="tsp-q-lbl">1080p HD</div>
+
+              <button class="tsp-cb" id="tsp-fs">
+                <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+              </button>
             </div>
           </div>
         </div>
 
         <script>
+          var wrap = document.getElementById('tsp-wrap');
           var video = document.getElementById('video');
-          var container = document.getElementById('player-container');
-          var seekFill = document.getElementById('seek-fill');
-          var seekContainer = document.getElementById('seek-container');
-          var timeText = document.getElementById('time-text');
-          var btnPlay = document.getElementById('btn-play');
-          var bigPlayIcon = document.getElementById('big-play-icon');
-          var centerPlay = document.getElementById('center-play');
-          var btnRewind = document.getElementById('btn-rewind');
-          var btnForward = document.getElementById('btn-forward');
-          var btnFullscreen = document.getElementById('btn-fullscreen');
+          var cur = document.getElementById('tsp-cur');
+          var dur = document.getElementById('tsp-dur');
+          var fill = document.getElementById('tsp-fill');
+          var thumb = document.getElementById('tsp-thumb');
+          var seek = document.getElementById('tsp-seek');
+          var playBtn = document.getElementById('tsp-play');
+          var playIc = document.getElementById('tsp-play-ic');
+          var centerPlay = document.getElementById('tsp-center-play');
+          var rewBtn = document.getElementById('tsp-rew');
+          var fwdBtn = document.getElementById('tsp-fwd');
+          var fsBtn = document.getElementById('tsp-fs');
+          var toast = document.getElementById('tsp-toast');
 
-          var hideTimer;
-          function resetHideTimer() {
-            container.classList.remove('ui-hidden');
-            clearTimeout(hideTimer);
-            hideTimer = setTimeout(function() {
-              if (!video.paused) {
-                container.classList.add('ui-hidden');
-              }
-            }, 3500);
+          var uiTimer;
+          function resetUi() {
+            wrap.classList.add('ui');
+            clearTimeout(uiTimer);
+            uiTimer = setTimeout(function() {
+              if (!video.paused) wrap.classList.remove('ui');
+            }, 3000);
           }
 
-          container.addEventListener('click', function(e) {
-            if (e.target.closest('.hud-bottom') || e.target.closest('.hud-top')) return;
-            resetHideTimer();
-          });
+          wrap.addEventListener('mousemove', resetUi);
+          wrap.addEventListener('touchstart', resetUi);
+
+          function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 1500);
+          }
 
           function togglePlay() {
-            if (video.paused) {
-              video.play();
-            } else {
-              video.pause();
-            }
+            if (video.paused) video.play();
+            else video.pause();
           }
 
           centerPlay.addEventListener('click', togglePlay);
-          btnPlay.addEventListener('click', togglePlay);
+          playBtn.addEventListener('click', togglePlay);
 
           video.addEventListener('play', function() {
-            btnPlay.className = 'fas fa-pause ctrl-icon';
-            bigPlayIcon.innerHTML = '<i class="fas fa-pause"></i>';
-            centerPlay.style.opacity = '0';
-            resetHideTimer();
+            wrap.classList.add('playing');
+            playIc.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+            resetUi();
           });
 
           video.addEventListener('pause', function() {
-            btnPlay.className = 'fas fa-play ctrl-icon';
-            bigPlayIcon.innerHTML = '<i class="fas fa-play" style="margin-left: 3px;"></i>';
-            centerPlay.style.opacity = '1';
-            container.classList.remove('ui-hidden');
+            wrap.classList.remove('playing');
+            wrap.classList.add('ui');
+            playIc.innerHTML = '<path d="M8 5v14l11-7z"/>';
           });
 
-          function fmtTime(s) {
-            if (isNaN(s) || !isFinite(s)) return '00:00';
+          function fmt(s) {
+            if (isNaN(s) || !isFinite(s)) return '0:00';
             s = Math.floor(s);
             var m = Math.floor(s / 60);
             var sec = s % 60;
-            return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
+            return m + ':' + (sec < 10 ? '0' + sec : sec);
           }
 
           video.addEventListener('timeupdate', function() {
             if (!video.duration) return;
             var pct = (video.currentTime / video.duration) * 100;
-            seekFill.style.width = pct + '%';
-            timeText.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(video.duration);
+            fill.style.width = pct + '%';
+            thumb.style.left = pct + '%';
+            cur.textContent = fmt(video.currentTime);
+            dur.textContent = fmt(video.duration);
           });
 
-          seekContainer.addEventListener('click', function(e) {
-            var rect = seekContainer.getBoundingClientRect();
+          seek.addEventListener('click', function(e) {
+            var rect = seek.getBoundingClientRect();
             var pos = (e.clientX - rect.left) / rect.width;
             video.currentTime = pos * video.duration;
           });
 
-          btnRewind.addEventListener('click', function() { video.currentTime = Math.max(0, video.currentTime - 10); });
-          btnForward.addEventListener('click', function() { video.currentTime = Math.min(video.duration, video.currentTime + 10); });
+          rewBtn.addEventListener('click', function() {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            showToast('-10s');
+          });
 
-          btnFullscreen.addEventListener('click', function() {
-            if (document.fullscreenElement) {
-              document.exitFullscreen();
-            } else {
-              container.requestFullscreen();
-            }
+          fwdBtn.addEventListener('click', function() {
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            showToast('+10s');
+          });
+
+          fsBtn.addEventListener('click', function() {
+            if (document.fullscreenElement) document.exitFullscreen();
+            else wrap.requestFullscreen();
           });
 
           var videoSrc = '${fullSourceUrl}';
