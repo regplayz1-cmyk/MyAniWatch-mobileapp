@@ -317,10 +317,27 @@ export default function WatchScreen({ route, navigation }: any) {
           .tsp-cb svg { width: 18px; height: 18px; fill: currentColor; }
           .tsp-sp-btn { flex: 1; }
 
-          .tsp-q-lbl {
-            padding: 4px 9px; border: 1px solid rgba(255,255,255,0.18); border-radius: var(--radius-sm);
-            background: rgba(255,255,255,0.08); color: var(--white-70); font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+          <!-- Quality & Speed Dropdown Styles -->
+          .tsp-q-wrap { position: relative; flex-shrink: 0; }
+          .tsp-q-dd {
+            display: none; position: absolute; bottom: calc(100% + 10px); right: 0;
+            background: var(--glass-bg-2); border: 1px solid var(--glass-border-h);
+            border-radius: var(--radius); min-width: 140px; overflow: hidden; z-index: 65;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.85);
           }
+          .tsp-q-dd.open { display: block; }
+          .tsp-q-header {
+            padding: 8px 12px 6px; font-size: 9px; font-family: var(--font-mono);
+            color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em;
+            border-bottom: 1px solid var(--glass-border);
+          }
+          .tsp-qi {
+            padding: 8px 12px; font-size: 12px; font-weight: 500; cursor: pointer;
+            color: var(--white-70); border-bottom: 1px solid var(--glass-border);
+            display: flex; align-items: center; justify-content: space-between;
+          }
+          .tsp-qi:last-child { border: none; }
+          .tsp-qi:hover, .tsp-qi.cur { color: var(--white); background: var(--white-10); font-weight: 700; }
         </style>
       </head>
       <body>
@@ -356,15 +373,39 @@ export default function WatchScreen({ route, navigation }: any) {
               <button class="tsp-cb" id="tsp-play">
                 <svg viewBox="0 0 24 24" id="tsp-play-ic"><path d="M8 5v14l11-7z"/></svg>
               </button>
-              <button class="tsp-cb" id="tsp-rew">
+              <button class="tsp-cb" id="tsp-rew" data-tip="-10s">
                 <svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
               </button>
-              <button class="tsp-cb" id="tsp-fwd">
+              <button class="tsp-cb" id="tsp-fwd" data-tip="+10s">
                 <svg viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05.99 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
               </button>
 
               <div class="tsp-sp-btn"></div>
-              <div class="tsp-q-lbl">1080p HD</div>
+
+              <!-- Speed Selector Menu -->
+              <div class="tsp-q-wrap">
+                <div class="tsp-q-dd" id="tsp-spd-dd">
+                  <div class="tsp-q-header">Speed</div>
+                  <div class="tsp-qi" data-speed="0.5">0.5x</div>
+                  <div class="tsp-qi" data-speed="0.75">0.75x</div>
+                  <div class="tsp-qi cur" data-speed="1.0">1.0x (Normal)</div>
+                  <div class="tsp-qi" data-speed="1.25">1.25x</div>
+                  <div class="tsp-qi" data-speed="1.5">1.5x</div>
+                  <div class="tsp-qi" data-speed="2.0">2.0x</div>
+                </div>
+                <div class="tsp-q-lbl" id="tsp-spd-btn">1.0x</div>
+              </div>
+
+              <!-- Quality Selector Menu -->
+              <div class="tsp-q-wrap">
+                <div class="tsp-q-dd" id="tsp-q-dd">
+                  <div class="tsp-q-header">Quality</div>
+                  <div id="tsp-q-list">
+                    <div class="tsp-qi cur">AUTO</div>
+                  </div>
+                </div>
+                <div class="tsp-q-lbl" id="tsp-q-btn">AUTO</div>
+              </div>
 
               <button class="tsp-cb" id="tsp-fs">
                 <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
@@ -389,22 +430,56 @@ export default function WatchScreen({ route, navigation }: any) {
           var fsBtn = document.getElementById('tsp-fs');
           var toast = document.getElementById('tsp-toast');
 
+          var qBtn = document.getElementById('tsp-q-btn');
+          var qDd = document.getElementById('tsp-q-dd');
+          var spdBtn = document.getElementById('tsp-spd-btn');
+          var spdDd = document.getElementById('tsp-spd-dd');
+
           var uiTimer;
           function resetUi() {
             wrap.classList.add('ui');
             clearTimeout(uiTimer);
             uiTimer = setTimeout(function() {
-              if (!video.paused) wrap.classList.remove('ui');
-            }, 3000);
+              if (!video.paused) {
+                wrap.classList.remove('ui');
+                qDd.classList.remove('open');
+                spdDd.classList.remove('open');
+              }
+            }, 3500);
           }
 
           wrap.addEventListener('mousemove', resetUi);
           wrap.addEventListener('touchstart', resetUi);
 
+          qBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            spdDd.classList.remove('open');
+            qDd.classList.toggle('open');
+          });
+
+          spdBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            qDd.classList.remove('open');
+            spdDd.classList.toggle('open');
+          });
+
+          spdDd.querySelectorAll('.tsp-qi').forEach(function(el) {
+            el.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var rate = parseFloat(el.getAttribute('data-speed'));
+              video.playbackRate = rate;
+              spdDd.querySelectorAll('.tsp-qi').forEach(function(i) { i.classList.remove('cur'); });
+              el.classList.add('cur');
+              spdBtn.textContent = rate + 'x';
+              spdDd.classList.remove('open');
+              showToast('Speed: ' + rate + 'x');
+            });
+          });
+
           function showToast(msg) {
             toast.textContent = msg;
             toast.classList.add('show');
-            setTimeout(function() { toast.classList.remove('show'); }, 1500);
+            setTimeout(function() { toast.classList.remove('show'); }, 1800);
           }
 
           function togglePlay() {
@@ -479,11 +554,38 @@ export default function WatchScreen({ route, navigation }: any) {
                 xhr.setRequestHeader('x-app-client', 'myaniwatch-mobile');
               }
             });
+
+            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+              video.play().catch(function(e) { console.log("Autoplay error:", e); });
+              
+              var levels = hls.levels;
+              var qList = document.getElementById('tsp-q-list');
+              if (levels && levels.length > 0) {
+                qList.innerHTML = '<div class="tsp-qi cur" data-idx="-1">AUTO</div>';
+                levels.forEach(function(lvl, idx) {
+                  var label = lvl.height ? lvl.height + 'p' : 'HD ' + (idx + 1);
+                  qList.innerHTML += '<div class="tsp-qi" data-idx="' + idx + '">' + label + '</div>';
+                });
+
+                qList.querySelectorAll('.tsp-qi').forEach(function(el) {
+                  el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var idx = parseInt(el.getAttribute('data-idx'));
+                    hls.currentLevel = idx;
+                    hls.loadLevel = idx;
+                    qList.querySelectorAll('.tsp-qi').forEach(function(i) { i.classList.remove('cur'); });
+                    el.classList.add('cur');
+                    qBtn.textContent = idx === -1 ? 'AUTO' : (levels[idx]?.height ? levels[idx].height + 'p' : 'HD');
+                    qDd.classList.remove('open');
+                    showToast('Quality: ' + el.textContent);
+                  });
+                });
+              }
+            });
+
             hls.loadSource(videoSrc);
             hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-              video.play().catch(function(e) { console.log("Autoplay error:", e); });
-            });
+
             hls.on(Hls.Events.ERROR, function(event, data) {
               if (data.fatal) {
                 switch (data.type) {
