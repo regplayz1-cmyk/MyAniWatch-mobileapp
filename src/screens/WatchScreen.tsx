@@ -169,72 +169,315 @@ export default function WatchScreen({ route, navigation }: any) {
       ? sourceUrl
       : `https://myaniwatch-ashen.vercel.app${sourceUrl.startsWith("/") ? "" : "/"}${sourceUrl}`;
 
-    const isHls =
-      type === "hls" ||
-      sourceUrl.includes(".m3u8") ||
-      sourceUrl.includes("/api/miruro-hls") ||
-      sourceUrl.includes("/api/senshi") ||
-      sourceUrl.includes("/api/hdhive") ||
-      sourceUrl.includes("/api/anizone") ||
-      sourceUrl.includes("/api/anibd") ||
-      sourceUrl.includes("master.m3u8");
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <style>
+          :root {
+            --primary: #8b5cf6;
+            --primary-glow: rgba(139, 92, 246, 0.5);
+            --accent: #00e5ff;
+            --bg: #090a0f;
+          }
+          * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+          body, html { width: 100%; height: 100%; background: var(--bg); overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Inter", Roboto, sans-serif; }
+          
+          #player-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+          }
+          
+          video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+          
+          /* Top HUD */
+          .hud-top {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            padding: 14px 18px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+            transition: opacity 0.3s ease;
+          }
+          
+          .hud-title {
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 70%;
+          }
+          
+          .hud-badge {
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 0 12px var(--primary-glow);
+          }
+          
+          /* Center Play Overlay */
+          .center-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 8;
+            background: rgba(0,0,0,0.3);
+            transition: opacity 0.3s ease;
+          }
+          
+          .play-btn-large {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 0 30px var(--primary-glow);
+            transition: transform 0.2s ease;
+          }
+          .play-btn-large:active { transform: scale(0.9); }
 
-    if (isHls) {
-      return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body, html { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-            #player-wrapper { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000; }
-            video { width: 100%; height: 100%; object-fit: contain; }
-          </style>
-        </head>
-        <body>
-          <div id="player-wrapper">
-            <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
+          /* Bottom Control Bar */
+          .hud-bottom {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 12px 16px 14px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: opacity 0.3s ease;
+          }
+
+          /* Seek Bar */
+          .seek-row {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          .seek-bar-container {
+            position: relative;
+            flex: 1;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            cursor: pointer;
+          }
+          .seek-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            border-radius: 3px;
+            width: 0%;
+          }
+          .time-text {
+            color: rgba(255,255,255,0.8);
+            font-size: 11px;
+            font-weight: 600;
+            font-family: monospace;
+            min-width: 80px;
+            text-align: right;
+          }
+
+          /* Controls Row */
+          .controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          .controls-left, .controls-right {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+          }
+          .ctrl-icon {
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            opacity: 0.85;
+            transition: opacity 0.2s;
+          }
+          .ctrl-icon:active { opacity: 1; transform: scale(1.1); }
+
+          /* Hidden UI state */
+          .ui-hidden .hud-top, .ui-hidden .hud-bottom, .ui-hidden .center-overlay {
+            opacity: 0;
+            pointer-events: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="player-container" class="ui-visible">
+          <video id="video" playsinline crossorigin="anonymous" autoplay></video>
+
+          <!-- Top HUD -->
+          <div class="hud-top">
+            <div class="hud-title">${title || "MyAniWatch"} • Episode ${currentEp}</div>
+            <div class="hud-badge">HD 1080p</div>
           </div>
-          <script>
-            var video = document.getElementById('video');
-            var videoSrc = '${fullSourceUrl}';
-            if (Hls.isSupported()) {
-              var hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true
-              });
-              hls.loadSource(videoSrc);
-              hls.attachMedia(video);
-              hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                video.play().catch(function() {});
-              });
-              hls.on(Hls.Events.ERROR, function(event, data) {
-                if (data.fatal) {
-                  switch (data.type) {
-                    case Hls.ErrorTypes.NETWORK_ERROR:
-                      hls.startLoad();
-                      break;
-                    case Hls.ErrorTypes.MEDIA_ERROR:
-                      hls.recoverMediaError();
-                      break;
-                    default:
-                      hls.destroy();
-                      break;
-                  }
-                }
-              });
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-              video.src = videoSrc;
-              video.addEventListener('loadedmetadata', function() { video.play(); });
+
+          <!-- Center Play Overlay -->
+          <div class="center-overlay" id="center-play">
+            <div class="play-btn-large" id="big-play-icon">
+              <i class="fas fa-play" style="margin-left: 3px;"></i>
+            </div>
+          </div>
+
+          <!-- Bottom Controls -->
+          <div class="hud-bottom">
+            <div class="seek-row">
+              <div class="seek-bar-container" id="seek-container">
+                <div class="seek-fill" id="seek-fill"></div>
+              </div>
+              <div class="time-text" id="time-text">00:00 / 00:00</div>
+            </div>
+            <div class="controls-row">
+              <div class="controls-left">
+                <i class="fas fa-play ctrl-icon" id="btn-play"></i>
+                <i class="fas fa-undo ctrl-icon" id="btn-rewind"></i>
+                <i class="fas fa-redo ctrl-icon" id="btn-forward"></i>
+              </div>
+              <div class="controls-right">
+                <i class="fas fa-expand ctrl-icon" id="btn-fullscreen"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          var video = document.getElementById('video');
+          var container = document.getElementById('player-container');
+          var seekFill = document.getElementById('seek-fill');
+          var seekContainer = document.getElementById('seek-container');
+          var timeText = document.getElementById('time-text');
+          var btnPlay = document.getElementById('btn-play');
+          var bigPlayIcon = document.getElementById('big-play-icon');
+          var centerPlay = document.getElementById('center-play');
+          var btnRewind = document.getElementById('btn-rewind');
+          var btnForward = document.getElementById('btn-forward');
+          var btnFullscreen = document.getElementById('btn-fullscreen');
+
+          var hideTimer;
+          function resetHideTimer() {
+            container.classList.remove('ui-hidden');
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(function() {
+              if (!video.paused) {
+                container.classList.add('ui-hidden');
+              }
+            }, 3500);
+          }
+
+          container.addEventListener('click', function(e) {
+            if (e.target.closest('.hud-bottom') || e.target.closest('.hud-top')) return;
+            resetHideTimer();
+          });
+
+          function togglePlay() {
+            if (video.paused) {
+              video.play();
+            } else {
+              video.pause();
             }
-          </script>
-        </body>
-        </html>
-      `;
-    }
-    return null;
+          }
+
+          centerPlay.addEventListener('click', togglePlay);
+          btnPlay.addEventListener('click', togglePlay);
+
+          video.addEventListener('play', function() {
+            btnPlay.className = 'fas fa-pause ctrl-icon';
+            bigPlayIcon.innerHTML = '<i class="fas fa-pause"></i>';
+            centerPlay.style.opacity = '0';
+            resetHideTimer();
+          });
+
+          video.addEventListener('pause', function() {
+            btnPlay.className = 'fas fa-play ctrl-icon';
+            bigPlayIcon.innerHTML = '<i class="fas fa-play" style="margin-left: 3px;"></i>';
+            centerPlay.style.opacity = '1';
+            container.classList.remove('ui-hidden');
+          });
+
+          function fmtTime(s) {
+            if (isNaN(s) || !isFinite(s)) return '00:00';
+            s = Math.floor(s);
+            var m = Math.floor(s / 60);
+            var sec = s % 60;
+            return (m < 10 ? '0' + m : m) + ':' + (sec < 10 ? '0' + sec : sec);
+          }
+
+          video.addEventListener('timeupdate', function() {
+            if (!video.duration) return;
+            var pct = (video.currentTime / video.duration) * 100;
+            seekFill.style.width = pct + '%';
+            timeText.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(video.duration);
+          });
+
+          seekContainer.addEventListener('click', function(e) {
+            var rect = seekContainer.getBoundingClientRect();
+            var pos = (e.clientX - rect.left) / rect.width;
+            video.currentTime = pos * video.duration;
+          });
+
+          btnRewind.addEventListener('click', function() { video.currentTime = Math.max(0, video.currentTime - 10); });
+          btnForward.addEventListener('click', function() { video.currentTime = Math.min(video.duration, video.currentTime + 10); });
+
+          btnFullscreen.addEventListener('click', function() {
+            if (document.fullscreenElement) {
+              document.exitFullscreen();
+            } else {
+              container.requestFullscreen();
+            }
+          });
+
+          var videoSrc = '${fullSourceUrl}';
+          if (Hls.isSupported()) {
+            var hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+            hls.loadSource(videoSrc);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+              video.play().catch(function() {});
+            });
+          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = videoSrc;
+            video.addEventListener('loadedmetadata', function() { video.play(); });
+          }
+        </script>
+      </body>
+      </html>
+    `;
   };
 
   const playerHtml = activeSource ? getPlayerHtml(activeSource.url, activeSource.type) : null;
