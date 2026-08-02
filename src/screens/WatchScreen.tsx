@@ -193,7 +193,7 @@ export default function WatchScreen({ route, navigation }: any) {
           {loading ? (
             <View style={styles.playerLoader}>
               <ActivityIndicator size="large" color={COLORS.primary} />
-              <Text style={styles.loadingText}>Fetching Stream Servers (Anizone, AniBD, 2Dhive)...</Text>
+              <Text style={styles.loadingText}>Fetching Stream Servers...</Text>
             </View>
           ) : activeSource ? (
             <WebView

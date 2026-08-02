@@ -144,7 +144,7 @@ export async function apiExtractHls(url: string) {
   });
 }
 
-// ── Multi-Provider Stream Sources (Anikai, Anizone, AniBD, 2Dhive, Senshi, Miruro, HiAnime) ──
+// ── Multi-Provider Stream Sources (Anikai, Anizone, Miruro, MegaPlay) ──
 export async function apiGetAllStreamSources(anilistId: string | number, episodeNumber: number, title?: string, malId?: number) {
   const sources: Array<{ name: string; url: string; type: "hls" | "iframe"; priority: number }> = [];
   const ep = episodeNumber || 1;
@@ -182,45 +182,7 @@ export async function apiGetAllStreamSources(anilistId: string | number, episode
     }
   } catch {}
 
-  // 3. Fetch AniBD HLS
-  try {
-    const anibdRes = await request(`/api/anibd/stream?anilistId=${anilistId}&episode=${ep}`);
-    if (anibdRes?.url) {
-      const ref = encodeURIComponent(anibdRes.referer || "https://playeng.animeapps.top/");
-      sources.push({
-        name: "AniBD (HardSub)",
-        url: `${API_BASE_URL}/api/miruro-hls?ref=${ref}&url=${encodeURIComponent(anibdRes.url)}`,
-        type: "hls",
-        priority: 9500,
-      });
-    }
-  } catch {}
-
-  // 4. Fetch 2Dhive
-  if (malId) {
-    try {
-      sources.push({
-        name: "2Dhive (Sub)",
-        url: `${API_BASE_URL}/api/hdhive/stream?malId=${malId}&episode=${ep}&lang=sub`,
-        type: "hls",
-        priority: 8600,
-      });
-    } catch {}
-  }
-
-  // 5. Fetch Senshi HLS
-  if (malId) {
-    try {
-      sources.push({
-        name: "Senshi (HLS)",
-        url: `${API_BASE_URL}/api/senshi/stream?malId=${malId}&episode=${ep}`,
-        type: "hls",
-        priority: 8800,
-      });
-    } catch {}
-  }
-
-  // 6. Fetch MegaPlay Fallback
+  // 3. Fetch MegaPlay Fallback
   if (anilistId) {
     sources.push({
       name: "MegaPlay Server",
